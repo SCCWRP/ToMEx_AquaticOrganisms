@@ -1004,7 +1004,7 @@ tabItem(tabName = "SSD",
                                   pickerInput(inputId = "Group_check_ssd", 
                                   label = "Organism Group:",
                                   choices = levels(aoc_z$Group),
-                                  selected = c("Algae","Annelida","Cnidaria", "Crustacea", "Fish", "Insect", "Mixed", "Mollusca", "Plant", "Rotifera", "Cyanobacteria", "Dinoflagellate", "Ciliophora"),
+                                  selected = c("Annelida","Cnidaria", "Crustacea", "Echinoderm", "Fish", "Insect", "Mixed", "Mollusca", "Rotifera", "Dinoflagellate", "Ciliophora"),
                                   options = list(`actions-box` = TRUE), 
                                   multiple = TRUE),
                                   
@@ -1149,7 +1149,7 @@ tabItem(tabName = "SSD",
                                  radioButtons(inputId = "alpha.value.matrix_ssd",
                                               label = "Alpha Values by Environmental Compartment:",
                                               choices = c("Marine Surface Water", "Freshwater Surface Water", "Marine Sediment", "Freshwater Sediment"),
-                                              selected = "Freshwater Surface Water")),
+                                              selected = "Marine Surface Water")),
                              
                                     #Alpha checkbox
                                     column(width = 4,
@@ -1262,7 +1262,7 @@ tabItem(tabName = "SSD",
                                  inputId = "conc.select.rad",
                                  label = "What summary statistic should be used for each species?",
                                  choices = list("Minimum", "Lower 95% CI", "1st Quartile", "Median", "Mean", "Geometric Mean", "3rd Quartile", "Upper 95% CI", "Maximum"),
-                                 selected = "Geometric Mean"))),
+                                 selected = "1st Quartile"))),
                               
             ) #close tabpanel  
             ), #closes out tabbox
@@ -7020,8 +7020,7 @@ output$downloadSsdPlot <- downloadHandler(
     dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL
      req(aoc_pred())
     aoc_pred <- aoc_pred() %>% 
-      mutate_if(is.numeric, ~ signif(., 3)) %>% 
-      select(percent, est, se, lcl, ucl, method, dist, nboot, pboot)
+      mutate_if(is.numeric, ~ signif(., 3))
     
       datatable(aoc_pred,
                 rownames = FALSE,
@@ -7036,7 +7035,7 @@ output$downloadSsdPlot <- downloadHandler(
                 ), 
                 class = "compact",
                 colnames = c("Hazard Concentration (%)", paste0("Estimated Mean Concentration ",  dose_check_ssd), paste0("Standard Error ",  dose_check_ssd), "Lower 95% Confidence Limit", 
-                             "Upper 95% Confidence Limit", "Fitting Method", "Distribution", "Bootstrap Iterations", "Proportion of Data Sets Successfully Fitted"),
+                             "Upper 95% Confidence Limit", "Distribution", "Proportion of Data Sets Successfully Fitted"),
                 caption = "Predicted species sensitivity distribution concentrations with uncertanties.
                 Note: Mehinto et al. (2022) (doi: 10.1186/s43591-022-00033-3) refers to the point estimate as the 'median' which is interchangable with the 'estimated mean concentration' reported in the table below. If 10 or more iterations are used to bootstrap the model, the mean and median become identical.")
                
