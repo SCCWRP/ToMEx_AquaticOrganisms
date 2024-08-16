@@ -32,5 +32,3 @@ Steve Weisberg, Southern California Coastal Water Research Project<br />
 **Primary Contact**
 
 Leah Thornton Hampton, Southern California Coastal Water Research Project (leahth@sccwrp.org)
-
-test commit
