@@ -1,13 +1,15 @@
-***Toxicity of Microplastics Explorer: Aquatic Organisms***
+***Toxicity of Microplastics Explorer 2.0: Aquatic Organisms***
 
-The Toxicity of Microplastics Explorer (ToMEx) is a database as well as a data visualization and analysis tool for microplastics ecotoxicity data. This tool was created to facilitate the activities of the California Microplastics Health Effects Workshop. 
+The Toxicity of Microplastics Explorer (ToMEx) is a database as well as a data visualization and analysis tool for microplastics ecotoxicity data. This tool was created to facilitate the activities of the California Microplastics Health Effects Workshop. This repository and web application represents an updated version of the ToMEx 1.0 database. 
 
 The web application is built using a variety of R packages including shiny, shinydashboard, tidyverse, ggplot, plotly, and ssdtools. 
 
-Application deployed at: https://sccwrp.shinyapps.io/aq_mp_tox_shiny/
+ToMEx 1.0 Application deployed at: https://sccwrp.shinyapps.io/aq_mp_tox_shiny/
+ToMEx 2.0 Application deployed at: https://sccwrp.shinyapps.io/tomex_20_aquatic_organisms/
 
 **Contributors**
 
+ToMEx 1.0:
 Leah Thornton Hampton, Southern California Coastal Water Research Project<br />
 Heili Lowman, University of Nevada, Reno<br />
 Scott Coffin, State Water Resources Control Board of California<br />
@@ -28,6 +30,9 @@ Bart Koelmans, Wageningen University<br />
 Chelsea Rochman, University of Toronto<br />
 Alvine Mehinto, Southern California Coastal Water Research Project<br />
 Steve Weisberg, Southern California Coastal Water Research Project<br />
+
+ToMEx 2.0:
+Coming Soon!
 
 **Primary Contact**
 
