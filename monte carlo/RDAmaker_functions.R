@@ -2,8 +2,9 @@
 # preps dataframe for use in RShiny app #
 
 library(tidyverse) #General everything
+getwd()
 
-source("functions.R") # necessary for surface area, volume calculations
+source("../../functions.R") # necessary for surface area, volume calculations
 
 # R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
 # R.ave.water.freshwater <- 0.67
@@ -1039,3 +1040,4 @@ aoc_quality <- aoc_setup %>%
 
 return(aoc_setup)
 } #end function
+

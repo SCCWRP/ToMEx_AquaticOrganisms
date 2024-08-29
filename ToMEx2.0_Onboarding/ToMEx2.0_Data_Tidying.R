@@ -9,7 +9,7 @@ library(readr)
 
 #Set working directory
 #setwd("~aq_mp_tox_shiny/")
-source("functions.R") # necessary for surface area, volume calculations
+source("../../functions.R") # necessary for surface area, volume calculations
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
 R.ave.water.freshwater <- 0.67
@@ -1321,3 +1321,4 @@ saveRDS(tomex2.0_aoc_quality_final, file = "aoc_quality_tomex2.RDS")
 # not_tidy_studies <- not_tidy %>% 
 #   group_by(doi,authors,`Issue Flag`) %>% 
 #   summarise() #24 studies with issue flags
+
