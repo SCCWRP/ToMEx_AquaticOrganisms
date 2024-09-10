@@ -7415,6 +7415,10 @@ output$downloadSsdPlot <- downloadHandler(
   
   #align data
   alignedData_calculator <- eventReactive(list(input$go_calculator),{
+    
+    #require align data button to be pressed to generate table
+    req(input$go_calculator)
+    
     #read in user dataset
     raw <- read.csv(input$alignment_file$datapath, stringsAsFactors = TRUE)
     
@@ -7652,7 +7656,7 @@ output$downloadSsdPlot <- downloadHandler(
       scrollY = 400,
       scrollH = TRUE,
       sScrollX = TRUE,
-      columnDefs = list(list(width = '50px, targets = "_all'))),#only display the table and nothing else
+      columnDefs = list(list(width = '50px', targets = "_all"))),#only display the table and nothing else
     caption = "Filtered Data") %>% 
     formatStyle(
       c("Surface-Area Aligned Exposure Concentration (particles/mL)", "Volume Aligned Exposure Concentration (particles/mL)", "Mass Aligned Exposure Concentration (particles/mL)", "Specific Surface Area Aligned Exposure Concentration (particles/mL)"),
@@ -7773,7 +7777,7 @@ output$downloadSsdPlot <- downloadHandler(
                 scrollY = 400,
                 scrollH = TRUE,
                 sScrollX = TRUE,
-                columnDefs = list(list(width = '50px, targets = "_all'))),#only display the table and nothing else
+                columnDefs = list(list(width = '50px', targets = "_all"))),#only display the table and nothing else
               caption = "Filtered Data") %>% 
       formatStyle(
         c("Predicted Conc. (particles/mL; 1-5,000 um)", "Predicted Conc. (log10 particles/mL; 1-5,000 um)"),

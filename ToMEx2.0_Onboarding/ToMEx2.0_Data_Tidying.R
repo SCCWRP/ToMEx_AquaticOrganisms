@@ -9,7 +9,7 @@ library(readr)
 
 #Set working directory
 #setwd("~aq_mp_tox_shiny/")
-source("../../functions.R") # necessary for surface area, volume calculations
+source("functions.R") # necessary for surface area, volume calculations
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
 R.ave.water.freshwater <- 0.67
