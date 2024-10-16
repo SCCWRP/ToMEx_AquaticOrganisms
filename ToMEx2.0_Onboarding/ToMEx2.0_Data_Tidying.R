@@ -213,7 +213,14 @@ tomex2.0_aoc_setup <- tomex2.0 %>%
    rowid_to_column() %>% 
    #Move screening scores up
    relocate(100:129, .after = article) %>% 
-   #Change pass/fail descriptors to 2/0
+
+### Previously, all column names were renamed using base::transform() which replaced spaces with periods,...
+### that package was updated to no longer do that, so we'll need to manually rename everything to be compatible
+### with all downstream scripts.
+
+rename_with(~ gsub(" |[?]|[(]|[)]|-|/|\\^", ".",.x), everything()) %>% ### replaces all special chars with '.'
+
+#    #Change pass/fail descriptors to 2/0
    mutate(`tech.a1` = case_when(`tech.a1` == "Pass" ~ 2,
                                 `tech.a1` == "Fail" ~ 0)) %>%
    mutate(`tech.a2` = case_when(`tech.a2` == "Pass" ~ 2,
