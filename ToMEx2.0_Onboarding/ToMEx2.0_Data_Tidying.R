@@ -7,8 +7,6 @@
 library(tidyverse)
 library(readr)
 
-#Set working directory
-#setwd("~aq_mp_tox_shiny/")
 source("functions.R") # necessary for surface area, volume calculations
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
@@ -185,6 +183,11 @@ tomex2.0$doi <- gsub('https://dx.doi.org/','',tomex2.0$doi)
 tomex2.0$doi <- gsub('https://doi.org/','',tomex2.0$doi)
 tomex2.0$doi <- gsub('doi.org/','',tomex2.0$doi)
 tomex2.0$doi <- gsub('https://','',tomex2.0$doi)
+
+#remove retracted manuscripts from ToMEx 2.0 data database
+tomex2.0 <- tomex2.0 %>% 
+  filter(!doi %in% c("10.1016/j.jhazmat.2020.123879", "10.1016/j.jhazmat.2020.123864", "10.1016/j.scitotenv.2020.141937",
+                     "10.1016/j.scitotenv.2020.141936", "10.1016/j.jhazmat.2021.127873", "10.1016/j.jhazmat.2021.127789"))
 
 #### Match Data Structure to ToMEx 1.0 ####
 
@@ -1295,37 +1298,3 @@ tomex2.0_aoc_quality_final <- tomex2.0_aoc_quality_final %>%
 
 #Save RDS file
 saveRDS(tomex2.0_aoc_quality_final, file = "aoc_quality_tomex2.RDS")
-
-#quick stats
-# library(tidyverse)
-# 
-# pubs <- as.data.frame(unique(aoc_setup_tomex2$doi))
-# 
-# study_types <- aoc_setup_tomex2 %>%
-#   group_by(doi, exp_type_f) %>% 
-#   summarise()
-#   
-# acute_chronic <- aoc_setup_tomex2 %>% 
-#   filter(acute.chronic_f == "Chronic")
-#   
-# vivo <- aoc_setup_tomex2 %>% 
-#   filter(vivo_f == "In Vitro")
-# 
-# species <- aoc_setup_tomex2 %>%
-#   filter(env_f == "Freshwater") %>% 
-#   group_by(species_f) %>% 
-#   summarise()
-# 
-# effect_metrics <- aoc_setup_tomex2 %>% 
-#   # filter(source != "ToMEx 2.0") %>% 
-#   filter(effect.metric %in% c("EC50", "LC50", "EC10", "IC50", "EC20", "LC20")) %>% 
-#   group_by(doi, env_f, org_f, species_f, effect.metric, lvl1_f, lvl2_f, lvl3_f) %>% 
-#   summarise()
-
-# not_tidy <- tomex2.0_aoc_setup_final %>% 
-#   filter(!is.na(`Issue Flag`)) #857 lines
-# 
-# not_tidy_studies <- not_tidy %>% 
-#   group_by(doi,authors,`Issue Flag`) %>% 
-#   summarise() #24 studies with issue flags
-

@@ -43,6 +43,14 @@ aoc_setup <- readRDS("aoc_setup_tomex2.RDS")
 # aoc_v1 <- readRDS("aoc_v1.RDS")
 aoc_z <- readRDS("aoc_z_tomex2.RDS")
 
+# aoc_setup <- aoc_setup %>%
+#  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%  
+#   filter(doi != "10.3390/nano11030649")
+# 
+# aoc_z <- aoc_z %>%
+#  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%  
+# filter(doi != "10.3390/nano11030649")
+
 #prediction models generated in aq_mp_tox_modelling repo (Scott_distributions_no_touchy.Rmd)
 predictionModel_tissue.translocation <- readRDS("prediction/randomForest_oxStress.rds")
 predictionModel_food.dilution <- readRDS("prediction/randomForest_foodDilution.rds")
