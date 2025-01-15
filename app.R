@@ -43,6 +43,14 @@ aoc_setup <- readRDS("aoc_setup_tomex2.RDS")
 # aoc_v1 <- readRDS("aoc_v1.RDS")
 aoc_z <- readRDS("aoc_z_tomex2.RDS")
 
+# aoc_setup <- aoc_setup %>%
+#  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%  
+#   filter(doi != "10.3390/nano11030649")
+# 
+# aoc_z <- aoc_z %>%
+#  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%  
+# filter(doi != "10.3390/nano11030649")
+
 #prediction models generated in aq_mp_tox_modelling repo (Scott_distributions_no_touchy.Rmd)
 predictionModel_tissue.translocation <- readRDS("prediction/randomForest_oxStress.rds")
 predictionModel_food.dilution <- readRDS("prediction/randomForest_foodDilution.rds")
@@ -4188,6 +4196,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     shinyjs::reset("Rep_Con_rad")
     shinyjs::reset("dose_check")
     shinyjs::reset("ERM_check")
+    shinyjs::reset("alpha.value.matrix")
     shinyjs::reset("alpha")
     shinyjs::reset("a.sa")
     shinyjs::reset("a.v")
@@ -7863,6 +7872,7 @@ output$downloadSsdPlot <- downloadHandler(
     shinyjs::reset("Reported_Converted_rad")
     shinyjs::reset("dose_check_ssd")
     shinyjs::reset("ERM_check_ssd")
+    shinyjs::reset("alpha.value.matrix_ssd")
     shinyjs::reset("alpha_ssd")
     shinyjs::reset("a.sa_ssd")
     shinyjs::reset("a.v_ssd")

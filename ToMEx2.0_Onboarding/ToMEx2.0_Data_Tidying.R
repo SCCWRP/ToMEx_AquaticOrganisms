@@ -7,8 +7,6 @@
 library(tidyverse)
 library(readr)
 
-#Set working directory
-#setwd("~aq_mp_tox_shiny/")
 source("functions.R") # necessary for surface area, volume calculations
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
@@ -185,6 +183,11 @@ tomex2.0$doi <- gsub('https://dx.doi.org/','',tomex2.0$doi)
 tomex2.0$doi <- gsub('https://doi.org/','',tomex2.0$doi)
 tomex2.0$doi <- gsub('doi.org/','',tomex2.0$doi)
 tomex2.0$doi <- gsub('https://','',tomex2.0$doi)
+
+#remove retracted manuscripts from ToMEx 2.0 data database
+tomex2.0 <- tomex2.0 %>% 
+  filter(!doi %in% c("10.1016/j.jhazmat.2020.123879", "10.1016/j.jhazmat.2020.123864", "10.1016/j.scitotenv.2020.141937",
+                     "10.1016/j.scitotenv.2020.141936", "10.1016/j.jhazmat.2021.127873", "10.1016/j.jhazmat.2021.127789"))
 
 #### Match Data Structure to ToMEx 1.0 ####
 
@@ -460,7 +463,6 @@ rename_with(~ gsub(" |[?]|[(]|[)]|-|/|\\^", ".",.x), everything()) %>% ### repla
   #Factor polymer
   mutate(polymer = factor(case_when(
     polymer == "Biopolymer" ~ "Biopolymer",
-    polymer == "Latex" ~ "Latex",
     polymer == "Not Reported" ~ "Not Reported",
     polymer == "Polyamide" ~ "Polyamide",
     polymer == "Polycarbonate" ~ "Polycarbonate",
@@ -497,7 +499,56 @@ rename_with(~ gsub(" |[?]|[(]|[)]|-|/|\\^", ".",.x), everything()) %>% ### repla
   rename(poly_f = polymer) %>%  
   #Rename density column
   rename(density.g.cm3 = density..g.cm.3.) %>% 
-  rename(density.reported.estimated = density..reported.estimated.) %>% 
+  rename(density.reported.estimated = density..reported.estimated.)
+  #Polymer and density data tidying
+  
+tomex2.0_aoc_setup$poly_f = fct_collapse(tomex2.0_aoc_setup$poly_f,
+                                               "Polyamide" = c("Polyamide", "Polyamide 66"),
+                                               "Polyethylene vinyl acetate" = c("Polyethylene (co-Vinyl acetate)", "Polyethylene Vinyl Acetate"),
+                                               "Not Reported" = "Not Reported")
+
+tomex2.0_aoc_setup$poly_f = fct_na_value_to_level(tomex2.0_aoc_setup$poly_f, "Not Reported")
+
+# exclude Polyamidoamine -> not MP
+tomex2.0_aoc_setup <- tomex2.0_aoc_setup[tomex2.0_aoc_setup$poly_f != "Polyamidoamine", ]
+
+#Calculate the median density for each polymer
+median_density_by_polymer = tomex2.0_aoc_setup %>%
+  group_by(poly_f) %>%
+  summarize(median_density = median(density.g.cm3, na.rm = TRUE)) %>% 
+  ungroup()
+
+#Join the mean temperature back to the original data
+tomex2.0_aoc_setup = left_join(tomex2.0_aoc_setup, median_density_by_polymer, by = "poly_f")
+
+#Fill NA values of density.g.cm.3. with the calculated median per polymer type
+tomex2.0_aoc_setup = tomex2.0_aoc_setup %>%
+  mutate(density.g.cm3 = ifelse(is.na(density.g.cm3), median_density, density.g.cm3))
+
+#Remove the temporary column median_density
+tomex2.0_aoc_setup = tomex2.0_aoc_setup %>% select(-median_density)
+
+#Identify unique Polymers with NA values in density.g.cm3
+na_polymer = unique(tomex2.0_aoc_setup$poly_f[is.na(tomex2.0_aoc_setup$density.g.cm3)])
+
+# Convert to character and sort the unique species alphabetically
+na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
+na_polymer # >>> check the density in the literature
+
+#
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "High Density Polyethylene"] = 0.953
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Poly(Styrene-co-acrylonitrile)"] = 1.08
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "polyethylene_vinyl_acetate"] = 0.953
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polyisoprene"] = 0.905
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polytetrafluoroethylene"] = 2.2
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polyurethane"] = 1.19
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polyvinyl Acetate"] = 1.19
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polyvinylchloride/vinylacetate co-polymer"] = 1.38
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Sodium Polyacrylate"] = 1.32
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Starch/Polybutylene Adipate Terephthalate/Polylactic Acid"] = 1.05
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Tire Wear"] = 1.45
+  
+tomex2.0_aoc_setup <- tomex2.0_aoc_setup %>%   
   #Factor shape
   mutate(shape = factor(shape)) %>% 
   rename(shape_f = shape) %>%  
@@ -566,7 +617,7 @@ rename_with(~ gsub(" |[?]|[(]|[)]|-|/|\\^", ".",.x), everything()) %>% ### repla
                                          shape_f == "Fiber" & is.na(size.width.um.used.for.conversions) ~ volumefnx_fiber(width = 15, length = size.length.um.used.for.conversions), #assume 15 um as width (kooi et al 2021)
                                          shape_f == "Fiber" & !is.na(size.width.um.used.for.conversions) ~ volumefnx_fiber(width = size.width.um.used.for.conversions, length = size.length.um.used.for.conversions), #if width reported
                                          shape_f == "Fragment" ~ volumefnx(R = R.ave, L = size.length.um.used.for.conversions))) %>% 
-  relocate(particle.volume.um3, .after = particle.surface.area.um2) %>% 
+  relocate(particle.volume.um3, .after = particle.surface.area.um2) %>%  
   #Calculate particle mass
   mutate(mass.per.particle.mg = (particle.volume.um3*density.g.cm3)*0.000000001) %>% 
   relocate(mass.per.particle.mg, .after = particle.volume.um3) %>%
@@ -920,17 +971,7 @@ tomex2.0_aoc_setup_final$target.cell.tissue  = fct_collapse(tomex2.0_aoc_setup_f
 
 tomex2.0_aoc_setup_final$target.cell.tissue = fct_na_value_to_level(tomex2.0_aoc_setup_final$target.cell.tissue , "Not Reported")
 
-#polymer
-tomex2.0_aoc_setup_final$poly_f = fct_collapse(tomex2.0_aoc_setup_final$poly_f,
-"Polyamide" = c("Polyamide", "Polyamide 66"),
-"Polyethylene vinyl acetate" = c("Polyethylene (co-Vinyl acetate)", "Polyethylene Vinyl Acetate"),
-"Not Reported" = "Not Reported",
-"Polystyrene" = "Latex")
 
-tomex2.0_aoc_setup_final$poly_f = fct_na_value_to_level(tomex2.0_aoc_setup_final$poly_f, "Not Reported")
-
-# exclude Polyamidoamine -> not MP
-tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final[tomex2.0_aoc_setup_final$poly_f != "Polyamidoamine", ]
 
 #particle source
 tomex2.0_aoc_setup_final$source = fct_collapse(tomex2.0_aoc_setup_final$source,
@@ -1012,42 +1053,6 @@ tomex2.0_aoc_setup_final$size.width.um.used.for.conversions[tomex2.0_aoc_setup_f
 #Add 1 as sample size for Algae, Bacterium, Cyanobacteria, Plant, and Mixed
 tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>%
   mutate(sample.size = ifelse(org_f %in% c("Algae", "Bacterium", "Cyanobacteria", "Dinoflagellate"), 1, sample.size))
-
-#Calculate the median density for each polymer
-median_density_by_polymer = tomex2.0_aoc_setup_final %>%
-  group_by(poly_f) %>%
-  summarize(median_density = median(density.g.cm3, na.rm = TRUE)) %>% 
-  ungroup()
-
-#Join the mean temperature back to the original data
-tomex2.0_aoc_setup_final = left_join(tomex2.0_aoc_setup_final, median_density_by_polymer, by = "poly_f")
-
-#Fill NA values of density.g.cm.3. with the calculated median per polymer type
-tomex2.0_aoc_setup_final = tomex2.0_aoc_setup_final %>%
-  mutate(density.g.cm3 = ifelse(is.na(density.g.cm3), median_density, density.g.cm3))
-
-#Remove the temporary column median_density
-tomex2.0_aoc_setup_final = tomex2.0_aoc_setup_final %>% select(-median_density)
-
-#Identify unique Polymers with NA values in density.g.cm3
-na_polymer = unique(tomex2.0_aoc_setup_final$poly_f[is.na(tomex2.0_aoc_setup_final$density.g.cm3)])
-
-# Convert to character and sort the unique species alphabetically
-na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
-na_polymer # >>> check the density in the literature
-
-#
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "High Density Polyethylene"] = "0.953"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Poly(Styrene-co-acrylonitrile)"] = "1.08"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "polyethylene_vinyl_acetate"] = "0.953"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyisoprene"] = "0.905"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polytetrafluoroethylene"] = "2.2"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyurethane"] = "1.19"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyvinyl Acetate"] = "1.19"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyvinylchloride/vinylacetate co-polymer"] = "1.38"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Sodium Polyacrylate"] = "1.32"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Starch/Polybutylene Adipate Terephthalate/Polylactic Acid"] = "1.05"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Tire Wear"] = "1.45"
 
 # Restructure temp column
 tomex2.0_aoc_setup_final$media.temp = as.numeric(tomex2.0_aoc_setup_final$media.temp)
@@ -1295,37 +1300,3 @@ tomex2.0_aoc_quality_final <- tomex2.0_aoc_quality_final %>%
 
 #Save RDS file
 saveRDS(tomex2.0_aoc_quality_final, file = "aoc_quality_tomex2.RDS")
-
-#quick stats
-# library(tidyverse)
-# 
-# pubs <- as.data.frame(unique(aoc_setup_tomex2$doi))
-# 
-# study_types <- aoc_setup_tomex2 %>%
-#   group_by(doi, exp_type_f) %>% 
-#   summarise()
-#   
-# acute_chronic <- aoc_setup_tomex2 %>% 
-#   filter(acute.chronic_f == "Chronic")
-#   
-# vivo <- aoc_setup_tomex2 %>% 
-#   filter(vivo_f == "In Vitro")
-# 
-# species <- aoc_setup_tomex2 %>%
-#   filter(env_f == "Freshwater") %>% 
-#   group_by(species_f) %>% 
-#   summarise()
-# 
-# effect_metrics <- aoc_setup_tomex2 %>% 
-#   # filter(source != "ToMEx 2.0") %>% 
-#   filter(effect.metric %in% c("EC50", "LC50", "EC10", "IC50", "EC20", "LC20")) %>% 
-#   group_by(doi, env_f, org_f, species_f, effect.metric, lvl1_f, lvl2_f, lvl3_f) %>% 
-#   summarise()
-
-# not_tidy <- tomex2.0_aoc_setup_final %>% 
-#   filter(!is.na(`Issue Flag`)) #857 lines
-# 
-# not_tidy_studies <- not_tidy %>% 
-#   group_by(doi,authors,`Issue Flag`) %>% 
-#   summarise() #24 studies with issue flags
-
