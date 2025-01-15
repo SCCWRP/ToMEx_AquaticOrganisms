@@ -2353,7 +2353,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         dose_check == "µm2/kg sediment" ~ dose.particles.kg.sediment.master,
         dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.sediment.master)) %>% 
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
-      mutate(mu.p.poly = mux.polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
+      mutate(mu.p.poly = mux_polyfnx_generalizable(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
       mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
       #calculate CF_bio for all conversions
@@ -2373,14 +2373,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         b = 0.5 * x2M, #length-limited
         c = 0.5 * x2M)) %>%   #length-limited
       #calculate mu_x_poly (env) for surface area
-      mutate(mu.sa.poly = mux.polyfnx(a.sa, x_UL_sa, x_LL_sa)) %>% 
+      mutate(mu.sa.poly = mux_polyfnx_generalizable(a.sa, x_UL_sa, x_LL_sa)) %>% 
       
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.sa.mono = case_when(
         polydispersity == "monodisperse" ~ particle.surface.area.um2, # use reported surface area in monodisperse
-        polydispersity == "polydisperse" ~  mux.polyfnx(a.x = a.sa, 
+        polydispersity == "polydisperse" ~  mux_polyfnx_generalizable(a.x = a.sa, 
                                                         x_LL = particle.surface.area.um2.min,
                                                         x_UL = particle.surface.area.um2.max))) %>% 
       #calculate polydisperse effect concentration for surface area (particles/mL)
@@ -2397,13 +2397,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(x_UL_v = volumefnx_poly(length = x2M, #length-limited
                                      width = x2M)) %>% #length-limited
       # calculate mu.v.poly
-      mutate(mu.v.poly = mux.polyfnx(a.v, x_UL_v, x_LL_v)) %>% 
+      mutate(mu.v.poly = mux_polyfnx_generalizable(a.v, x_UL_v, x_LL_v)) %>% 
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.v.mono = case_when(
         polydispersity == "monodisperse" ~ particle.volume.um3, # use reported volume in monodisperse
-        polydispersity == "polydisperse" ~ mux.polyfnx(a.x = a.v, 
+        polydispersity == "polydisperse" ~ mux_polyfnx_generalizable(a.x = a.v, 
                                                        x_LL = particle.volume.um3.min,
                                                        x_UL = particle.volume.um3.max))) %>% 
       
@@ -2423,13 +2423,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                    length = x2M, #length-limited
                                    p = p.ave)) %>% #average density
       # calculate mu.m.poly
-      mutate(mu.m.poly = mux.polyfnx(a.m, x_UL_m, x_LL_m)) %>% 
+      mutate(mu.m.poly = mux_polyfnx_generalizable(a.m, x_UL_m, x_LL_m)) %>% 
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.m.mono = case_when(
         polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
-        polydispersity == "polydisperse" ~ mux.polyfnx(a.x = a.m, 
+        polydispersity == "polydisperse" ~ mux_polyfnx_generalizable(a.x = a.m, 
                                                        x_UL = mass.per.particle.mg.max * 1000,
                                                        x_LL = mass.per.particle.mg.min * 1000))) %>% 
       #calculate polydisperse effect concentration for volume (particles/mL)
@@ -2449,7 +2449,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ) %>% 
       #calculate mu_x_poly for specific surface area
       #note that mu were calcaulted for polydisperse particles before, so not special case needed here
-      mutate(mu.ssa.inverse.poly = mux.polyfnx(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
+      mutate(mu.ssa.inverse.poly = mux_polyfnx_generalizable(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
       #calculate polydisperse effect concentration for specific surface area (particles/mL)
       mutate(mu.ssa.poly = 1 / mu.ssa.inverse.poly) %>%  #calculate mu_SSA from inverse
       mutate(EC_poly_ssa.particles.mL = (EC_env_p.particles.mL * mu.ssa.mono)/mu.ssa.poly) %>% 
@@ -2459,51 +2459,51 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ### Convert to Metrics other than particles/mL ###
       ## convert all environmentally realistic thresholds to surface area ##
       # particle count to surface area #
-      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to surface area #
-      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to surface area #
-      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to surface area #
-      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to surface area #
-      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to volume ##
       # particle count to volume #
-      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to volume #
-      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to volume #
-      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to volume #
-      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to volume #
-      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to mass ##
       # particle count to mass #
-      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to mass #
-      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to mass #
-      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to mass #
-      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to mass #
-      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to specific surface area ##
       # particle count to specific surface area #
-      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to specific surface area #
-      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to specific surface area #
-      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to specific surface area #
-      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to specific surface area #
-      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
+      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
     
     ###### Alpha Value Radio Buttons ######
     observeEvent(input$alpha.value.matrix,{
@@ -3749,6 +3749,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     #Mini data set for measurement and study labels
     aoc_shape1 <- aoc_filter() %>%
+    #aoc_shape1 <- aoc_filter %>%
       drop_na(dose_new) %>%
       group_by(shape_f, effect_f) %>% # need to include so there's a recognized "y"
       summarize(dose_new = quantile(dose_new, .1), # need for recognized "x"
@@ -4377,7 +4378,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         dose_check == "µm2/kg sediment" ~ dose.particles.kg.sediment.master,
         dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.sediment.master)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
-      mutate(mu.p.poly = mux.polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
+      mutate(mu.p.poly = mux_polyfnx_generalizable(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
       mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
       #calculate CF_bio for all conversions
@@ -4398,14 +4399,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         b = 0.5 * x2M, #length-limited
         c = 0.5 * x2M)) %>%   #length-limited
       #calculate mu_x_poly (env) for surface area
-      mutate(mu.sa.poly = mux.polyfnx(a.sa, x_UL_sa, x_LL_sa)) %>% 
+      mutate(mu.sa.poly = mux_polyfnx_generalizable(a.sa, x_UL_sa, x_LL_sa)) %>% 
       
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.sa.mono = case_when(
         polydispersity == "monodisperse" ~ particle.surface.area.um2, # use reported surface area in monodisperse
-        polydispersity == "polydisperse" ~  mux.polyfnx(a.x = a.sa, 
+        polydispersity == "polydisperse" ~  mux_polyfnx_generalizable(a.x = a.sa, 
                                                         x_LL = particle.surface.area.um2.min,
                                                         x_UL = particle.surface.area.um2.max))) %>% 
       #calculate polydisperse effect concentration for surface area (particles/mL)
@@ -4422,13 +4423,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(x_UL_v = volumefnx_poly(length = x2M, #length-limited
                                      width = x2M)) %>% #length-limited
       # calculate mu.v.poly
-      mutate(mu.v.poly = mux.polyfnx(a.v, x_UL_v, x_LL_v)) %>% 
+      mutate(mu.v.poly = mux_polyfnx_generalizable(a.v, x_UL_v, x_LL_v)) %>% 
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.v.mono = case_when(
         polydispersity == "monodisperse" ~ particle.volume.um3, # use reported volume in monodisperse
-        polydispersity == "polydisperse" ~ mux.polyfnx(a.x = a.v, 
+        polydispersity == "polydisperse" ~ mux_polyfnx_generalizable(a.x = a.v, 
                                                        x_LL = particle.volume.um3.min,
                                                        x_UL = particle.volume.um3.max))) %>% 
       
@@ -4448,13 +4449,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                    length = x2M, #length-limited
                                    p = p.ave)) %>% #average density
       # calculate mu.m.poly
-      mutate(mu.m.poly = mux.polyfnx(a.m, x_UL_m, x_LL_m)) %>% 
+      mutate(mu.m.poly = mux_polyfnx_generalizable(a.m, x_UL_m, x_LL_m)) %>% 
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.m.mono = case_when(
         polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
-        polydispersity == "polydisperse" ~ mux.polyfnx(a.x = a.m, 
+        polydispersity == "polydisperse" ~ mux_polyfnx_generalizable(a.x = a.m, 
                                                        x_UL = mass.per.particle.mg.max * 1000,
                                                        x_LL = mass.per.particle.mg.min * 1000))) %>% 
       #calculate polydisperse effect concentration for volume (particles/mL)
@@ -4474,7 +4475,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ) %>% 
       #calculate mu_x_poly for specific surface area
       #note that mu were calcaulted for polydisperse particles before, so not special case needed here
-      mutate(mu.ssa.inverse.poly = mux.polyfnx(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
+      mutate(mu.ssa.inverse.poly = mux_polyfnx_generalizable(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
       #calculate polydisperse effect concentration for specific surface area (particles/mL)
       mutate(mu.ssa.poly = 1 / mu.ssa.inverse.poly) %>%  #calculate mu_SSA from inverse
       mutate(EC_poly_ssa.particles.mL = (EC_env_p.particles.mL * mu.ssa.mono)/mu.ssa.poly) %>% 
@@ -4484,51 +4485,51 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ### Convert to Metrics other than particles/mL ###
       ## convert all environmentally realistic thresholds to surface area ##
       # particle count to surface area #
-      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to surface area #
-      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to surface area #
-      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to surface area #
-      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to surface area #
-      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to volume ##
       # particle count to volume #
-      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to volume #
-      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to volume #
-      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to volume #
-      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to volume #
-      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to mass ##
       # particle count to mass #
-      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to mass #
-      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to mass #
-      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to mass #
-      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to mass #
-      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to specific surface area ##
       # particle count to specific surface area #
-      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to specific surface area #
-      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to specific surface area #
-      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to specific surface area #
-      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to specific surface area #
-      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
+      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
     
    
     ###### Water Radio Button Alignments ######
@@ -5556,7 +5557,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       dose_check == "µm2/kg sediment" ~ dose.particles.kg.sediment.master,
       dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.sediment.master)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
-      mutate(mu.p.poly = mux.polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
+      mutate(mu.p.poly = mux_polyfnx_generalizable(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
       mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
       #calculate CF_bio for all conversions
@@ -5576,14 +5577,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         b = 0.5 * x2M, #length-limited
         c = 0.5 * x2M)) %>%   #length-limited
       #calculate mu_x_poly (env) for surface area
-      mutate(mu.sa.poly = mux.polyfnx(a.sa, x_UL_sa, x_LL_sa)) %>% 
+      mutate(mu.sa.poly = mux_polyfnx_generalizable(a.sa, x_UL_sa, x_LL_sa)) %>% 
       
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.sa.mono = case_when(
         polydispersity == "monodisperse" ~ particle.surface.area.um2, # use reported surface area in monodisperse
-        polydispersity == "polydisperse" ~  mux.polyfnx(a.x = a.sa, 
+        polydispersity == "polydisperse" ~  mux_polyfnx_generalizable(a.x = a.sa, 
                                                         x_LL = particle.surface.area.um2.min,
                                                         x_UL = particle.surface.area.um2.max))) %>% 
       #calculate polydisperse effect concentration for surface area (particles/mL)
@@ -5600,13 +5601,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(x_UL_v = volumefnx_poly(length = x2M, #length-limited
                                      width = x2M)) %>% #length-limited
       # calculate mu.v.poly
-      mutate(mu.v.poly = mux.polyfnx(a.v, x_UL_v, x_LL_v)) %>% 
+      mutate(mu.v.poly = mux_polyfnx_generalizable(a.v, x_UL_v, x_LL_v)) %>% 
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.v.mono = case_when(
         polydispersity == "monodisperse" ~ particle.volume.um3, # use reported volume in monodisperse
-        polydispersity == "polydisperse" ~ mux.polyfnx(a.x = a.v, 
+        polydispersity == "polydisperse" ~ mux_polyfnx_generalizable(a.x = a.v, 
                                                        x_LL = particle.volume.um3.min,
                                                        x_UL = particle.volume.um3.max))) %>% 
       
@@ -5626,13 +5627,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                    length = x2M, #length-limited
                                    p = p.ave)) %>% #average density
       # calculate mu.m.poly
-      mutate(mu.m.poly = mux.polyfnx(a.m, x_UL_m, x_LL_m)) %>% 
+      mutate(mu.m.poly = mux_polyfnx_generalizable(a.m, x_UL_m, x_LL_m)) %>% 
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.m.mono = case_when(
         polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
-        polydispersity == "polydisperse" ~ mux.polyfnx(a.x = a.m, 
+        polydispersity == "polydisperse" ~ mux_polyfnx_generalizable(a.x = a.m, 
                                                        x_UL = mass.per.particle.mg.max * 1000,
                                                        x_LL = mass.per.particle.mg.min * 1000))) %>% 
       #calculate polydisperse effect concentration for volume (particles/mL)
@@ -5652,7 +5653,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ) %>% 
       #calculate mu_x_poly for specific surface area
       #note that mu were calcaulted for polydisperse particles before, so not special case needed here
-      mutate(mu.ssa.inverse.poly = mux.polyfnx(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
+      mutate(mu.ssa.inverse.poly = mux_polyfnx_generalizable(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
       #calculate polydisperse effect concentration for specific surface area (particles/mL)
       mutate(mu.ssa.poly = 1 / mu.ssa.inverse.poly) %>%  #calculate mu_SSA from inverse
       mutate(EC_poly_ssa.particles.mL = (EC_env_p.particles.mL * mu.ssa.mono)/mu.ssa.poly) %>% 
@@ -5662,51 +5663,51 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ### Convert to Metrics other than particles/mL ###
       ## convert all environmentally realistic thresholds to surface area ##
       # particle count to surface area #
-      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to surface area #
-      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to surface area #
-      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to surface area #
-      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to surface area #
-      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to volume ##
       # particle count to volume #
-      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to volume #
-      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to volume #
-      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to volume #
-      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to volume #
-      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to mass ##
       # particle count to mass #
-      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to mass #
-      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to mass #
-      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to mass #
-      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to mass #
-      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to specific surface area ##
       # particle count to specific surface area #
-      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to specific surface area #
-      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to specific surface area #
-      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to specific surface area #
-      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to specific surface area #
-      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
+      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
       
     ##### Water Radio Button Alignments #####
     # Unaligned #
@@ -7474,7 +7475,7 @@ output$downloadSsdPlot <- downloadHandler(
       # calculate effect threshold for particles
       mutate(EC_mono_p.particles.mL = dose.particles.mL.master) %>% 
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
-      mutate(mu.p.poly = mux.polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
+      mutate(mu.p.poly = mux_polyfnx_generalizable(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
       mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
       #calculate CF_bio for all conversions
@@ -7495,14 +7496,14 @@ output$downloadSsdPlot <- downloadHandler(
         b = 0.5 * x2M, #length-limited
         c = 0.5 * x2M)) %>%   #length-limited
       #calculate mu_x_poly (env) for surface area
-      mutate(mu.sa.poly = mux.polyfnx(a.sa, x_UL_sa, x_LL_sa)) %>% 
+      mutate(mu.sa.poly = mux_polyfnx_generalizable(a.sa, x_UL_sa, x_LL_sa)) %>% 
       
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.sa.mono = case_when(
         polydispersity == "monodisperse" ~ particle.surface.area.um2, # use reported surface area in monodisperse
-        polydispersity == "polydisperse" ~  mux.polyfnx(a.x = a.sa, 
+        polydispersity == "polydisperse" ~  mux_polyfnx_generalizable(a.x = a.sa, 
                                                         x_LL = particle.surface.area.um2.min,
                                                         x_UL = particle.surface.area.um2.max))) %>% 
       #calculate polydisperse effect concentration for surface area (particles/mL)
@@ -7519,13 +7520,13 @@ output$downloadSsdPlot <- downloadHandler(
       mutate(x_UL_v = volumefnx_poly(length = x2M, #length-limited
                                      width = x2M)) %>% #length-limited
       # calculate mu.v.poly
-      mutate(mu.v.poly = mux.polyfnx(a.v, x_UL_v, x_LL_v)) %>% 
+      mutate(mu.v.poly = mux_polyfnx_generalizable(a.v, x_UL_v, x_LL_v)) %>% 
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.v.mono = case_when(
         polydispersity == "monodisperse" ~ particle.volume.um3, # use reported volume in monodisperse
-        polydispersity == "polydisperse" ~ mux.polyfnx(a.x = a.v, 
+        polydispersity == "polydisperse" ~ mux_polyfnx_generalizable(a.x = a.v, 
                                                        x_LL = particle.volume.um3.min,
                                                        x_UL = particle.volume.um3.max))) %>% 
       
@@ -7545,13 +7546,13 @@ output$downloadSsdPlot <- downloadHandler(
                                    length = x2M, #length-limited
                                    p = p.ave)) %>% #average density
       # calculate mu.m.poly
-      mutate(mu.m.poly = mux.polyfnx(a.m, x_UL_m, x_LL_m)) %>% 
+      mutate(mu.m.poly = mux_polyfnx_generalizable(a.m, x_UL_m, x_LL_m)) %>% 
       ##--- laboratory calculations ---###
       ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.m.mono = case_when(
         polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
-        polydispersity == "polydisperse" ~ mux.polyfnx(a.x = a.m, 
+        polydispersity == "polydisperse" ~ mux_polyfnx_generalizable(a.x = a.m, 
                                                        x_UL = mass.per.particle.mg.max * 1000,
                                                        x_LL = mass.per.particle.mg.min * 1000))) %>% 
       #calculate polydisperse effect concentration for volume (particles/mL)
@@ -7571,7 +7572,7 @@ output$downloadSsdPlot <- downloadHandler(
       ) %>% 
       #calculate mu_x_poly for specific surface area
       #note that mu were calcaulted for polydisperse particles before, so not special case needed here
-      mutate(mu.ssa.inverse.poly = mux.polyfnx(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
+      mutate(mu.ssa.inverse.poly = mux_polyfnx_generalizable(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
       #calculate polydisperse effect concentration for specific surface area (particles/mL)
       mutate(mu.ssa.poly = 1 / mu.ssa.inverse.poly) %>%  #calculate mu_SSA from inverse
       mutate(EC_poly_ssa.particles.mL = (EC_env_p.particles.mL * mu.ssa.mono)/mu.ssa.poly) %>% 
@@ -7581,51 +7582,51 @@ output$downloadSsdPlot <- downloadHandler(
       ### Convert to Metrics other than particles/mL ###
       ## convert all environmentally realistic thresholds to surface area ##
       # particle count to surface area #
-      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to surface area #
-      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to surface area #
-      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to surface area #
-      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to surface area #
-      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to volume ##
       # particle count to volume #
-      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to volume #
-      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to volume #
-      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to volume #
-      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to volume #
-      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to mass ##
       # particle count to mass #
-      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to mass #
-      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to mass #
-      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to mass #
-      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to mass #
-      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       ## convert all environmentally realistic thresholds to specific surface area ##
       # particle count to specific surface area #
-      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # surface area to specific surface area #
-      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # volume to specific surface area #
-      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
       # mass to specific surface area #
-      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to specific surface area #
-      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux.polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx_generalizable(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       
       #annotate aligned ERM of interest for user interpretability
       mutate("Surface-Area Aligned Exposure Concentration (particles/mL)" = EC_env_sa.particles.mL,

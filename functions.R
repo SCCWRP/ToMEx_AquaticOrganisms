@@ -53,16 +53,39 @@ CFfnx = function(a, #default alpha from Koelmans et al (2020)
 
 #### equations for mu_x_poly (note that there are three depending on certain alphas for limits of equation)
 ##### if alpha does not equal 2 #####
-mux.polyfnx = function(a.x, 
-                       x_UL, 
-                       x_LL){
-  mux.poly = ((1-a.x)/(2-a.x)) * ((x_UL^(2-a.x) - x_LL^(2-a.x))/(x_UL^(1-a.x) - x_LL^(1-a.x)))
-  return(mux.poly)}
+# mux.polyfnx = function(a.x, 
+#                        x_UL, 
+#                        x_LL){
+#   mux.poly = ((1-a.x)/(2-a.x)) * ((x_UL^(2-a.x) - x_LL^(2-a.x))/(x_UL^(1-a.x) - x_LL^(1-a.x)))
+#   return(mux.poly)}
+# 
+# ##### If alpha does equal 2 #####
+# mux.polyfnx.2 = function(x_UL,x_LL){
+#   mux.poly = (log(x_UL/x_LL))/(x_LL^(-1) - x_UL^-1)
+#   return(mux.poly)}
+############# - above functions are deprecated - see generalizable function below ###
 
-##### If alpha does equal 2 #####
-mux.polyfnx.2 = function(x_UL,x_LL){
-  mux.poly = (log(x_UL/x_LL))/(x_LL^(-1) - x_UL^-1)
-  return(mux.poly)}
+### Generalizable function that works on any value (alpha == 1 and == 2 are limits!)
+mux_polyfnx_generalizable <- function(a.x, x_UL, x_LL) {
+  # Create a result vector of the same length as the input
+  mux.poly <- numeric(length(a.x))
+  
+  # Case when a.x == 1
+  idx1 <- which(a.x == 1)
+  mux.poly[idx1] <- (x_UL[idx1] - x_LL[idx1]) / (log(x_UL[idx1] / x_LL[idx1]))
+  
+  # Case when a.x == 2
+  idx2 <- which(a.x == 2)
+  mux.poly[idx2] <- (log(x_UL[idx2] / x_LL[idx2])) / (x_LL[idx2]^-1 - x_UL[idx2]^-1)
+  
+  # Case for other values of a.x
+  idx_else <- which(!(a.x == 1 | a.x == 2))
+  mux.poly[idx_else] <- ((1 - a.x[idx_else]) / (2 - a.x[idx_else])) * 
+    ((x_UL[idx_else]^(2 - a.x[idx_else]) - x_LL[idx_else]^(2 - a.x[idx_else])) / 
+       (x_UL[idx_else]^(1 - a.x[idx_else]) - x_LL[idx_else]^(1 - a.x[idx_else])))
+  
+  return(mux.poly)
+}
 
 #max ingestible specific surface area
 SSA.inversefnx = function(sa, #surface area, calcaulted elsewhere
