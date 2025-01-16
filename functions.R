@@ -53,10 +53,15 @@ CFfnx = function(a, #default alpha from Koelmans et al (2020)
 
 #### equations for mu_x_poly (note that there are three depending on certain alphas for limits of equation)
 ##### if alpha does not equal 2 #####
-# mux.polyfnx = function(a.x, 
-#                        x_UL, 
+# mux.polyfnx = function(a.x,
+#                        x_UL,
 #                        x_LL){
 #   mux.poly = ((1-a.x)/(2-a.x)) * ((x_UL^(2-a.x) - x_LL^(2-a.x))/(x_UL^(1-a.x) - x_LL^(1-a.x)))
+# 
+#   # Log outputs
+#   print("Output from mux_polyfnx:")
+#   print(paste("a.x:", a.x, "x_UL:", x_UL, "x_LL:", x_LL, "mux.poly:", mux.poly))
+# 
 #   return(mux.poly)}
 # 
 # ##### If alpha does equal 2 #####
@@ -67,23 +72,48 @@ CFfnx = function(a, #default alpha from Koelmans et al (2020)
 
 ### Generalizable function that works on any value (alpha == 1 and == 2 are limits!)
 mux_polyfnx_generalizable <- function(a.x, x_UL, x_LL) {
-  # Create a result vector of the same length as the input
+  # Validate inputs
+  if (length(a.x) != length(x_UL) || length(a.x) != length(x_LL)) {
+    stop("a.x, x_UL, and x_LL must have the same length.")
+  }
+
+  # Initialize result vector
   mux.poly <- numeric(length(a.x))
-  
-  # Case when a.x == 1
-  idx1 <- which(a.x == 1)
-  mux.poly[idx1] <- (x_UL[idx1] - x_LL[idx1]) / (log(x_UL[idx1] / x_LL[idx1]))
-  
-  # Case when a.x == 2
-  idx2 <- which(a.x == 2)
-  mux.poly[idx2] <- (log(x_UL[idx2] / x_LL[idx2])) / (x_LL[idx2]^-1 - x_UL[idx2]^-1)
-  
-  # Case for other values of a.x
-  idx_else <- which(!(a.x == 1 | a.x == 2))
-  mux.poly[idx_else] <- ((1 - a.x[idx_else]) / (2 - a.x[idx_else])) * 
-    ((x_UL[idx_else]^(2 - a.x[idx_else]) - x_LL[idx_else]^(2 - a.x[idx_else])) / 
-       (x_UL[idx_else]^(1 - a.x[idx_else]) - x_LL[idx_else]^(1 - a.x[idx_else])))
-  
+
+  # Loop through each element to handle row-by-row logic
+  for (i in seq_along(a.x)) {
+    if (is.na(a.x[i]) || is.na(x_UL[i]) || is.na(x_LL[i])) {
+      # Handle NA values
+      mux.poly[i] <- NA
+    } else if (a.x[i] == 1) {
+      # Special case: a.x == 1
+      if (x_UL[i] > 0 && x_LL[i] > 0) {
+        mux.poly[i] <- (x_UL[i] - x_LL[i]) / log(x_UL[i] / x_LL[i])
+      } else {
+        mux.poly[i] <- NA  # Invalid input for log
+      }
+    } else if (a.x[i] == 2) {
+      # Special case: a.x == 2
+      epsilon <- 1e-10  # Small value to avoid division by zero
+      if (x_UL[i] > 0 && x_LL[i] > 0) {
+        mux.poly[i] <- log(x_UL[i] / x_LL[i]) /
+          ((x_LL[i] + epsilon)^-1 - (x_UL[i] + epsilon)^-1)
+      } else {
+        mux.poly[i] <- NA  # Invalid input for log
+      }
+    } else {
+      # General case: a.x != 1 and a.x != 2
+      if (x_UL[i] > 0 && x_LL[i] > 0) {
+        mux.poly[i] <- ((1 - a.x[i]) / (2 - a.x[i])) *
+          ((x_UL[i]^(2 - a.x[i]) - x_LL[i]^(2 - a.x[i])) /
+             (x_UL[i]^(1 - a.x[i]) - x_LL[i]^(1 - a.x[i])))
+      } else {
+        mux.poly[i] <- NA  # Invalid input for power calculations
+      }
+    }
+  }
+
+  # Return the result
   return(mux.poly)
 }
 

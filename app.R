@@ -4313,6 +4313,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   
   # Create new all tested dataset based on widget filtering and adjusted to reflect the presence of the "update" button.
   aoc_ssd_filtered <- eventReactive(list(input$SSDgo),{
+    req(input$alpha_ssd, input$upper_length_ssd, input$lower_length_ssd)
+    validate(
+      need(length(input$alpha_ssd) == length(input$upper_length_ssd) &&
+             length(input$alpha_ssd) == length(input$lower_length_ssd),
+           "Inputs must have the same length.")
+    )
+    
     # eventReactive explicitly delays activity until you press the button
     # here we'll use the inputs to create a new dataset that will be fed into the renderPlot calls below
     exp_type_c_ssd <- input$exp_type_check_ssd
@@ -4337,25 +4344,43 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     ## ERM parametrization ##
     # Define params for alignments #
-    alpha = input$alpha_ssd #length power law exponent
+    alpha = as.numeric(input$alpha_ssd) #length power law exponent
     x2D_set = as.numeric(input$upper_length_ssd) #upper size range (default)
-    x1D_set = input$lower_length_ssd #lower size range (default)
-    x1M_set = input$lower_length_ssd #lower size range for ingestible plastic (user defined)
+    x1D_set = as.numeric(input$lower_length_ssd) #lower size range (default)
+    x1M_set = as.numeric(input$lower_length_ssd) #lower size range for ingestible plastic (user defined)
     upper.tissue.trans.size.um <- as.numeric(input$upper.tissue.trans.size.um_ssd) #user-defined upper value for tissue trans (numeric)
     ingestion.translocation.switch <- input$ingestion.translocation.switch_ssd #user-defined: inputs are "ingestion" or "translocation"
     
     # define parameters for power law coefficients
-    a.sa = input$a.sa_ssd #1.5 #marine surface area power law
-    a.v = input$a.v_ssd#1.48 #a_V for marine surface water volume
-    a.m = input$a.m_ssd#1.32 # upper limit fora_m for mass for marine surface water in table S4 
-    a.ssa = input$a.ssa_ssd #1.98 # A_SSA for marine surface water
+    a.sa = as.numeric(input$a.sa_ssd) #1.5 #marine surface area power law
+    a.v = as.numeric(input$a.v_ssd) #1.48 #a_V for marine surface water volume
+    a.m = as.numeric(input$a.m_ssd) #1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa = as.numeric(input$a.ssa_ssd) #1.98 # A_SSA for marine surface water
     
     #define additional parameters for calculations based on averages in the environment
-    R.ave = input$R.ave_ssd #0.77 #average width to length ratio for microplastics in marine enviornment
-    p.ave = input$p.ave_ssd#1.10 #average density in marine surface water
+    R.ave = as.numeric(input$R.ave_ssd) #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave = as.numeric(input$p.ave_ssd) #1.10 #average density in marine surface water
     
+    print(paste("Performing alignments for:", "alpha:", alpha, "x2D_set:", x2D_set,
+                "x1D_set:", x1D_set, "x1M_set:", x1M_set, "a.sa:", a.sa, "a.v:", a.v, "a.m:", a.m, "a.ssa:", a.ssa))
+  
+
     # calculate ERM for each species
     aoc_z <- aoc_z %>%
+      # explicitly add vars to dataframe instead of leaving as global vars - otherwise mux.poly.generalizable fnx will fail
+      mutate(alpha = alpha,
+             x2D_set = x2D_set,
+             x1D_set = x1D_set,
+             x1M_set = x1M_set,
+             upper.tissue.trans.size.um = upper.tissue.trans.size.um,
+             ingestion.translocation.switch = ingestion.translocation.switch,
+             a.sa = a.sa,
+             a.v = a.v,
+             a.m = a.m,
+             a.ssa = a.ssa,
+             R.ave = R.ave,
+             p.ave = p.ave
+             ) %>% 
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
       mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
@@ -4369,7 +4394,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
       mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
                              ingestion.translocation == "translocation" ~ x2M_trans)) %>% 
-      
       ###### Alignments #1 ######
       # Particle ERM #
       # calculate effect threshold for particles (the case_when below is simply to tell ToMEx to align the particles for either sediment or water)
@@ -4386,6 +4410,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         dose_check == "µm3/kg sediment" ~ dose.particles.kg.sediment.master,
         dose_check == "µm2/kg sediment" ~ dose.particles.kg.sediment.master,
         dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.sediment.master)) %>%
+
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx_generalizable(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
@@ -5535,6 +5560,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     # calculate ERM for each species
     aoc_z <- aoc_z %>%
+      # Add user input columns into the dataframe (if left as global vars, will fail)
+      mutate(alpha = alpha,
+             x2D_set = x2D_set,
+             x1D_set = x1D_set,
+             x1M_set = x1M_set,
+             upper.tissue.trans.size.um = upper.tissue.trans.size.um,
+             ingestion.translocation.switch = ingestion.translocation.switch,
+             a.sa = a.sa,
+             a.v = a.v,
+             a.m = a.m,
+             a.ssa = a.ssa,
+             R.ave = R.ave,
+             p.ave = p.ave
+      ) %>% 
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
       mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
