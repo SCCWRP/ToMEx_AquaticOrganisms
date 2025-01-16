@@ -43,13 +43,13 @@ aoc_setup <- readRDS("aoc_setup_tomex2.RDS")
 # aoc_v1 <- readRDS("aoc_v1.RDS")
 aoc_z <- readRDS("aoc_z_tomex2.RDS")
 
-aoc_setup <- aoc_setup %>%
- filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
-  filter(doi != "10.3390/nano11030649")
-
-aoc_z <- aoc_z %>%
- filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
-filter(doi != "10.3390/nano11030649")
+# aoc_setup <- aoc_setup %>%
+#  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
+#   filter(doi != "10.3390/nano11030649")
+# 
+# aoc_z <- aoc_z %>%
+#  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
+# filter(doi != "10.3390/nano11030649")
 
 #prediction models generated in aq_mp_tox_modelling repo (Scott_distributions_no_touchy.Rmd)
 predictionModel_tissue.translocation <- readRDS("prediction/randomForest_oxStress.rds")
@@ -6696,14 +6696,15 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, upper.tissue.trans.size.um), #if tissue-trans limited, don't use data with non-translocatable particles
                        ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set))) %>%  #if ingestion-limited, don't use data outside upper default size range
       drop_na(dose_new) %>%  #must drop NAs or else nothing will work
+      filter(dose_new > 0) %>% 
       group_by(Species, Group) %>%
       summarise(geomeanEffect = exp(mean(log(dose_new))),
-                minConcEffect = min(dose_new), meanConcEffect = mean(dose_new), 
-                medianConcEffect = median(dose_new), SDConcEffect = sd(dose_new),
+                minConcEffect = min(dose_new), meanConcEffect = mean(dose_new, na.rm = T), 
+                medianConcEffect = median(dose_new, na.rm = T), SDConcEffect = sd(dose_new, na.rm = T),
                 MaxConcEffect = max(dose_new), 
-                CI95_LCL = meanConcEffect - 1.96 * SDConcEffect/sqrt(n()), 
-                firstQuartileConcEffect = quantile(dose_new, 0.25), 
-                CI95_UCL = meanConcEffect + 1.96 * SDConcEffect/sqrt(n()), 
+                CI95_LCL = exp(log(meanConcEffect) - 1.96 * sd(log(dose_new)) / sqrt(n())),  # Log-transformed LCL
+                firstQuartileConcEffect = quantile(dose_new, 0.25, na.rm = TRUE),
+                CI95_UCL = exp(log(meanConcEffect) + 1.96 * sd(log(dose_new)) / sqrt(n())),  # Log-transformed UCL
                 thirdQuartileConcEffect = quantile(dose_new, 0.75), 
                 CountEffect = n(), 
                 MinEffectType = lvl1_f[which.min(dose_new)], 
