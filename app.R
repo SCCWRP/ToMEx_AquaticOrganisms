@@ -1308,17 +1308,19 @@ tabItem(tabName = "SSD",
             
               column(width = 12,
                 
-                plotOutput(outputId = "aoc_ssd_ggplot", height = "500px", hover = hoverOpts(id = "plot_hover")), verbatimTextOutput("info"),
+              #  plotOutput(outputId = "aoc_ssd_ggplot", height = "500px", hover = hoverOpts(id = "plot_hover")), verbatimTextOutput("info"),
+              plotlyOutput("aoc_ssd_plotly"),
                 br(),
                 
               p("The model-averaged 95% confidence interval is indicated by the shaded band and the model-averaged Hazard Concentration by the dotted line.")),
               br(),  
             
             column(width = 12,
+                   p("Further customization of downloadable plot is available here:"),
             column(width = 3,
                    selectInput(inputId = "theme.type", "Dark or Light Mode:",
                                list(light = "light", dark = "dark"))),
-            
+
             column(width = 3,
                    selectInput(inputId = "color.type", "Color Theme:",
                                list(viridis = "viridis", brewer = "brewer", tron = "tron", locusZoom = "locusZoom", d3 = "d3", Nature = "Nature", JAMA = "JAMA")))),
@@ -2330,6 +2332,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     # calculate ERM for each species
     aoc_setup <- aoc_setup %>% 
+      # explicitly add vars to dataframe instead of leaving as global vars - otherwise mux.poly.generalizable fnx will fail
+      mutate(alpha = alpha,
+             x2D_set = x2D_set,
+             x1D_set = x1D_set,
+             x1M_set = x1M_set,
+             upper.tissue.trans.size.um = upper.tissue.trans.size.um,
+             ingestion.translocation.switch = ingestion.translocation.switch,
+             a.sa = a.sa,
+             a.v = a.v,
+             a.m = a.m,
+             a.ssa = a.ssa,
+             R.ave = R.ave,
+             p.ave = p.ave
+      ) %>% 
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
       mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
@@ -5540,8 +5556,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     risk_tier_zero_c_ssd<-input$risk_tier_zero_check_ssd #assign values to "risk_tier_zero_c"
     
     # ERM parametrization ##
-    # Define params for alignments #
-    alpha = input$alpha_ssd #length power law exponent
+    # Define params for alignments 
     x2D_set = as.numeric(input$upper_length_ssd) #upper size range (default)
     x1D_set = input$lower_length_ssd #lower size range (default)
     x1M_set = input$lower_length_ssd #lower size range for ingestible plastic (user defined)
@@ -5549,6 +5564,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     ingestion.translocation.switch <- input$ingestion.translocation.switch_ssd #user-defined: inputs are "ingestion" or "translocation"
     
     # define parameters for power law coefficients
+    alpha = input$alpha_ssd #length power law exponent
     a.sa = input$a.sa_ssd #1.5 #marine surface area power law
     a.v = input$a.v_ssd#1.48 #a_V for marine surface water volume
     a.m = input$a.m_ssd#1.32 # upper limit fora_m for mass for marine surface water in table S4 
@@ -5561,12 +5577,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     # calculate ERM for each species
     aoc_z <- aoc_z %>%
       # Add user input columns into the dataframe (if left as global vars, will fail)
-      mutate(alpha = alpha,
-             x2D_set = x2D_set,
+      mutate(x2D_set = x2D_set,
              x1D_set = x1D_set,
              x1M_set = x1M_set,
              upper.tissue.trans.size.um = upper.tissue.trans.size.um,
              ingestion.translocation.switch = ingestion.translocation.switch,
+             alpha = alpha,
              a.sa = a.sa,
              a.v = a.v,
              a.m = a.m,
@@ -6805,12 +6821,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     set.seed(99) #reproducibility
     
-    ssd_fit_dists(aoc_filter_ssd(), #data frame
+    fit_dists <- ssd_fit_dists(aoc_ssd, #data frame
                   left = "Conc", #string of the column in data with the concentrations
                   # right = left, #string of the column with the right concentration values. If different from left, then the data are considerd to be censored
                  dists = c("weibull", "llogis", "lnorm", "gamma", "lgumbel"), #char vector of distribution anmes
                  computable = FALSE, #flag specifying whether to only return fits with numerically computable standard errors
                 silent = FALSE) #flag indicating whether fits should fail silently
+    
+    fit_dists
   }) 
   
   #create an autoplot of the distributions
@@ -6858,10 +6876,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     pred_c_ic_ssd <- input$pred_ic_ssd #assign prediction information criteria choice
     nbootNum <- as.numeric(input$nbootInput) #assign  number of bootsrap samples
     dist_c <- input$dist #assign input to selected distribution
+    fit_dists <- fit_dists()
     
     if(pred_c_ave_ssd == TRUE){
     set.seed(99)
-    stats::predict(fit_dists(), #Predict fitdist. 
+    
+      aoc_pred <- stats::predict(fit_dists, #Predict fitdist. 
           average = pred_c_ave_ssd, #flag tells whether or not to average models from user input
            ic = pred_c_ic_ssd, #tells which information criteria to use - user input
             nboot = nbootNum, #number of bootstrap samples to use to estimate SE and CL
@@ -6870,7 +6890,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     else{
       set.seed(99)
-      predict(fit_dists(), #Predict fitdist. 
+      aoc_pred <- predict(fit_dists, #Predict fitdist. 
                     average = pred_c_ave_ssd, #flag tells whether or not to average models from user input
                    ic = pred_c_ic_ssd, #tells which information criteria to use - user input
                      nboot = nbootNum, #number of bootstrap samples to use to estimate SE and CL
@@ -6878,69 +6898,59 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         as.data.frame() %>% 
         filter(dist == dist_c)
     }
+    aoc_pred
     
   }) 
  
 ###### SSD Plot ######
 #Create the plot for species sensitivity distribution
-SSD_plot_react <- reactive({
-    req(aoc_pred()) #won't start until prediction is complete
-    pred_c_hc_ssd <- as.numeric(input$pred_hc_ssd) #assign hazard concentration from numeric input
-    #determine if particles of mass will be used
-    dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL
-  
-    aoc_ssd <- aoc_filter_ssd() %>% arrange(Conc) #static
     
-    aoc_ssd$frac <- ppoints(aoc_ssd$Conc, 0.5)
-    #convert hazard concentration to sig digits
-    aochc <- aoc_hc()
-    aochc$est_format <-format(aochc$est, digits = 3, scientific = TRUE)
-    
-    ## generate plot from prediction ##
-  ssd_plot(
-     aoc_ssd, #data
-     aoc_pred(), #prediction
-     color = "source",
-     label = "Species",
-     xlab = dose_check_ssd,
-     ci = TRUE, #confidence interval plotting
-     ribbon = TRUE,
-     hc = pred_c_hc_ssd) + #percent hazard concentration
-     scale_fill_viridis_d() + #make colors more differentiable 
-     scale_colour_viridis_d() +  #make colors more differentiable 
-     expand_limits(x = c(0.000000000001,5000)) + # to ensure the species labels fit
-    geom_text(data = aochc, aes(x = est, y = 0, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 4) + #label for hazard conc
-    geom_text(data = aochc, aes(x = est, y = -0.05, label = est_format), color = "red") #label for hazard conc
-    
-      })
-  
-# print the SSD plot    
-output$SSD_plot <- renderPlot({
-  SSD_plot_react()
-  })
-    
-    
-# Create downloadable png of ssd plot
-output$downloadSsdPlot <- downloadHandler(
-  
-  filename = function() {
-    paste('SSD_plot', Sys.Date(), '.png', sep='')
-  },
-  content = function(file) {
-    # #define user inputs
-     # width <- isolate(input$user_width)
-     # height <- isolate(input$user_height)
-    device <- function(..., width, height) {
-      grDevices::png(..., width = 10, height = 8, res = 250, units = "in")
-    }
-    ggsave(file, plot = ssd_ggplot(), device = device)
-  })
+## commenting out to reduce confusion - as we're now using ggplot instead.
+# SSD_plot_react <- reactive({
+#     req(aoc_pred()) #won't start until prediction is complete
+#     pred_c_hc_ssd <- as.numeric(input$pred_hc_ssd) #assign hazard concentration from numeric input
+#     #determine if particles of mass will be used
+#     dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL
+#   
+#     aoc_ssd <- aoc_filter_ssd() %>% arrange(Conc) #static
+#     
+#     aoc_ssd$frac <- ppoints(aoc_ssd$Conc, 0.5)
+#     #convert hazard concentration to sig digits
+#     aochc <- aoc_hc()
+#     aochc$est_format <-format(aochc$est, digits = 3, scientific = TRUE)
+#     
+#     ## generate plot from prediction ##
+#   ssd_plot(
+#      aoc_ssd, #data
+#      aoc_pred(), #prediction
+#      color = "source",
+#      label = "Species",
+#      xlab = dose_check_ssd,
+#      ci = TRUE, #confidence interval plotting
+#      ribbon = TRUE,
+#      hc = pred_c_hc_ssd) + #percent hazard concentration
+#      scale_fill_viridis_d() + #make colors more differentiable 
+#      scale_colour_viridis_d() +  #make colors more differentiable 
+#      expand_limits(x = c(0.000000000001,5000)) + # to ensure the species labels fit
+#     geom_text(data = aochc, aes(x = est, y = 0, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 4) + #label for hazard conc
+#     geom_text(data = aochc, aes(x = est, y = -0.05, label = est_format), color = "red") #label for hazard conc
+#     
+#       })
+#   
+# # print the SSD plot    
+# output$SSD_plot <- renderPlot({
+#   SSD_plot_react()
+#   })
+#     
+#     
+
 
   ###### Sub-plots #####
   #Determine Hazard Concentration
   
   #Estimate hazard concentration
   aoc_hc <- eventReactive(list(input$ssdPred),{
+    fit_dists <- fit_dists()
     
     #user inputs
     pred_c_ave_ssd <- as.logical(input$pred_ave_ssd) #assign prediction averaging choice
@@ -6951,7 +6961,7 @@ output$downloadSsdPlot <- downloadHandler(
   
       if(pred_c_ave_ssd == TRUE){
     set.seed(99)
-    ssd_hc(fit_dists(), #dataset
+    aoc_hc <- ssd_hc(fit_dists, #dataset
           percent = pred_c_hc_ssd, #numeric threshold input by user (default is 0.05)
            nboot = nbootNum, # number of bootstrap predictions to make. 10 is minimum, 1,000 is default
         average = pred_c_ave_ssd, #tells whether or not the average models
@@ -6961,7 +6971,7 @@ output$downloadSsdPlot <- downloadHandler(
     
     #create hc based on user choice of distribution
     else{
-      ssd_hc(fit_dists(), #dataset
+      aoc_hc <- ssd_hc(fit_dists(), #dataset
             percent = pred_c_hc_ssd, #numeric threshold input by user (default is 0.05)
              nboot = nbootNum, # number of bootstrap predictions to make. 10 is minimum, 1,000 is default
          average = pred_c_ave_ssd, #tells whether or not the average models
@@ -6969,18 +6979,21 @@ output$downloadSsdPlot <- downloadHandler(
              ci = TRUE) %>%  #flag to estimate confidence intervals using parametric bootstrapping
         as.data.frame() %>% 
         filter(dist == dist_c)
-        }
+    }
+    aoc_hc
   })
   
-#Plot SSD data with ggplot
+###### #Plot SSD data with ggplot#####
    ssd_ggplot <- reactive({
      
      req(input$ssdPred) #won't start until button is pressed for prediction
      
+     aoc_pred <- aoc_pred()
+     
      #Theme type
      theme.type<-switch(input$theme.type,
-                       "light" 	= theme_gray(base_size = 15),
-                       "dark" = dark_theme_bw(base_size = 15)) 
+                       "light" 	= theme_minimal(base_size = 15),
+                       "dark" = dark_theme_minimal(base_size = 15)) 
      #color selection
      fill.type <- switch(input$color.type,
                          "viridis" = scale_fill_viridis(discrete = TRUE),
@@ -7001,19 +7014,21 @@ output$downloadSsdPlot <- downloadHandler(
                          "JAMA" = scale_color_jama())
 
      
-     dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL
+     dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL ("Particles/mL" is default)
+     ERM_check_ssd <-  input$ERM_check_ssd# "Unaligned" is default
+     lower_length_ssd <- input$lower_length_ssd #1 is default
+     upper_length_ssd <- input$upper_length_ssd #50000 is default
      aoc_ssd <- aoc_filter_ssd() %>% arrange(Conc) #static
     
      #calcualte fraction
     aoc_ssd$frac <- ppoints(aoc_ssd$Conc, 0.5)
     
     #convert hazard concentration to sig digits
-    aochc <- aoc_hc()
-    
-    aochc$est_format <-format(aochc$est, digits = 3, scientific = TRUE)
+    aoc_hc <- aoc_hc()
+    aoc_hc$est_format <-format(aoc_hc$est, digits = 3, scientific = TRUE)
     
     #build ggplot
-    ggplot(aoc_pred(),aes_string(x = "est")) +
+    ssd_ggplot <- ggplot(aoc_pred,aes_string(x = "est")) +
       geom_xribbon(aes_string(xmin = "lcl", xmax = "ucl", y = "percent/100"), alpha = 0.2, color = "grey") +
       geom_line(aes_string(y = "percent/100"), color = "gray") +
       geom_point(data = aoc_ssd,aes(x = Conc, y =frac, color = Group)) + 
@@ -7022,27 +7037,29 @@ output$downloadSsdPlot <- downloadHandler(
       scale_y_continuous("Species Affected (%)", labels = scales::percent, limits = c(0,1)) +
       #expand_limits(x = c(0.000000001, 100000)) + #ensure species labels fit
       # reactive x axis based on alignment
-      xlab(ifelse(input$ERM_check_ssd == "Unaligned", dose_check_ssd,
-           paste0(dose_check_ssd, " (",input$lower_length_ssd, " to ",input$upper_length_ssd, " um)"))
+      xlab(ifelse(ERM_check_ssd == "Unaligned", dose_check_ssd,
+           paste0(dose_check_ssd, " (",lower_length_ssd, " to ",upper_length_ssd, " um)"))
            )+
       labs(
         title = "Microplastics Species Sensitivity Distribution",
-             subtitle = paste("(ERM = ",input$ERM_check_ssd,")")) +
+             subtitle = paste("(ERM = ",ERM_check_ssd,")")) +
       coord_trans(x = "log10") +
       scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 15),
                          labels = trans_format("log10", scales::math_format(10^.x))) + #comma_signif)+
-      # geom_segment(data = aochc,aes(x = est, y = percent/100, xend = est, yend = est), linetype = 'dashed', color = "red", size = .5) + #hazard conc line vertical
-      # geom_segment(data = aochc,aes(x = lcl, y = percent/100, xend = est, yend = percent/100), linetype = 'dashed', color = "red", size = .5) + #hazard conc line horizontal
-      # geom_text(data = aochc, aes(x = est, y = 0.15, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 5) + #label for hazard conc
-      # geom_text(data = aochc, aes(x = est, y = 0.10, label = paste0(est_format, " ", dose_check_ssd)), color = "red", size = 5) + #label for hazard conc
-      geom_text(data = aochc, aes(x = Inf, y = 0.15, hjust = 1.2, vjust = 0, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 5) + #label for hazard conc
-      geom_text(data = aochc, aes(x = Inf, y = 0.10, hjust = 1.4, vjust = 0, label = paste0(est_format, " ", dose_check_ssd)), color = "red", size = 5) + #label for hazard conc
-      geom_label(data = aoc_pred(), aes(x = 100000, y = -0.05, label = paste0("distribution:", dist)), color = "darkcyan", size = 5) + #label for distribution
+      # geom_segment(data = aoc_hc,aes(x = est, y = percent/100, xend = est, yend = est), linetype = 'dashed', color = "red", size = .5) + #hazard conc line vertical
+      # geom_segment(data = aoc_hc,aes(x = lcl, y = percent/100, xend = est, yend = percent/100), linetype = 'dashed', color = "red", size = .5) + #hazard conc line horizontal
+      # geom_text(data = aoc_hc, aes(x = est, y = 0.15, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 5) + #label for hazard conc
+      # geom_text(data = aoc_hc, aes(x = est, y = 0.10, label = paste0(est_format, " ", dose_check_ssd)), color = "red", size = 5) + #label for hazard conc
+      geom_text(data = aoc_hc, aes(x = Inf, y = 0.15, hjust = 1.2, vjust = 0, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 5) + #label for hazard conc
+      geom_text(data = aoc_hc, aes(x = Inf, y = 0.10, hjust = 1.4, vjust = 0, label = paste0(est_format, " ", dose_check_ssd)), color = "red", size = 5) + #label for hazard conc
+      geom_label(data = aoc_pred, aes(x = 100000, y = -0.05, label = paste0("distribution:", dist)), color = "darkcyan", size = 5) + #label for distribution
       fill.type + #user-selected
       color.type + #user-selected
       theme.type + #user theme
       theme(plot.title = element_text(hjust = 0.5),
             plot.subtitle = element_text(hjust = 0.5))
+    
+    ssd_ggplot
   })
   
   
@@ -7063,6 +7080,171 @@ output$downloadSsdPlot <- downloadHandler(
     paste0(
       "", xy_str(input$plot_hover)
     )
+  })
+  
+  # Create downloadable png of ssd plot
+  output$downloadSsdPlot <- downloadHandler(
+    
+    filename = function() {
+      paste('SSD_plot', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      # #define user inputs
+      # width <- isolate(input$user_width)
+      # height <- isolate(input$user_height)
+      device <- function(..., width, height) {
+        grDevices::png(..., width = 10, height = 8, res = 250, units = "in")
+      }
+      ggsave(file, plot = ssd_ggplot(), device = device)
+    })
+  
+  
+  #### SSD Plotly ####
+  ssd_plotly <- reactive({
+    req(input$ssdPred) #won't start until button is pressed for prediction
+    
+    aoc_pred <- aoc_pred()
+    
+ 
+    dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL ("Particles/mL" is default)
+    ERM_check_ssd <-  input$ERM_check_ssd# "Unaligned" is default
+    lower_length_ssd <- input$lower_length_ssd #1 is default
+    upper_length_ssd <- input$upper_length_ssd #50000 is default
+    aoc_ssd <- aoc_filter_ssd() %>% arrange(Conc) #static
+    
+    #calcualte fraction
+    aoc_ssd$frac <- ppoints(aoc_ssd$Conc, 0.5)
+    
+    #convert hazard concentration to sig digits
+    aoc_hc <- aoc_hc()
+    aoc_hc$est_format <-format(aoc_hc$est, digits = 3, scientific = TRUE)
+    
+    #Sort data by percent so the ribbon polygon is correct
+    aoc_pred_sorted <- aoc_pred[order(aoc_pred$percent), ]
+    #Construct the polygon for CI
+    ribbon_x <- c(aoc_pred_sorted$lcl, rev(aoc_pred_sorted$ucl))
+    ribbon_y <- c(aoc_pred_sorted$percent / 100, rev(aoc_pred_sorted$percent / 100))
+    
+    # Comma-format the dose_check_ssd, lower_length_ssd, and upper_length_ssd
+    dose_label <- formatC(dose_check_ssd,     big.mark=",", format="fg", digits=3)
+    
+    upper_fmt  <- formatC(upper_length_ssd,  big.mark=",", format="fg", digits=3)
+    
+    #build plotly
+    ssdplotly <- plot_ly() %>%
+      # CI Ribbon 
+      add_trace(
+        name      = "X-Ribbon",      # internal name
+        showlegend= FALSE,           # hide from legend
+        type      = "scatter",
+        mode      = "lines",
+        x         = ribbon_x,
+        y         = ribbon_y,
+        fillcolor = "gray",
+        line      = list(color = "gray"),
+        hoverinfo = "none"
+      ) %>%
+      # Prediction line
+      add_trace(
+        data      = aoc_pred,
+        name      = "Prediction",
+        showlegend= FALSE,           # hide from legend
+        type      = "scatter",
+        mode      = "lines",
+        x         = ~est,
+        y         = ~(percent / 100),
+        line      = list(color = "black"),
+        text  = ~paste(
+          "% Species Affected:", signif((percent), 2),  "<br>",
+          "Predicted Concentration:", signif((est), 2), dose_check_ssd
+        ),
+        hoverinfo = "text"
+      ) %>%
+      # species points
+      add_trace(
+        data  = aoc_ssd,
+        type  = "scatter",
+        mode  = "markers",
+        x     = ~Conc,
+        y     = ~frac,
+        color = ~Group,
+        colors = "Set3",
+        text  = ~paste(
+          "Species:", Species, "<br>",
+          "Group:", Group, "<br>",
+          "Predicted Concentration:", signif(Conc, 3), dose_check_ssd, "<br>",
+          "% Species Affected:", signif(frac, 3),"<br>",
+          "# Data Points for Species:", CountTotal, "<br>",
+          "Mean Effect Concentration for Species:", signif(meanConcEffect,3), "<br>",
+          "Standard Deviation for Species:", signif(SDConcEffect,3), "<br>",
+          "Environment for Species:", MinEnvironment, "<br>",
+          "Most Sensitive Effect for Species:", Minlvl2EffectType, "<br>",
+          "DOI of Most Sensitive Study for Species:", MinDoi
+        ),
+        hoverinfo = "text"
+      ) %>%
+      # Species labels (Plotly has no "repel")
+      add_trace(
+        data         = aoc_ssd,
+        type         = "scatter",
+        mode         = "text",
+        x            = ~Conc,
+        y            = ~frac,
+        color        = ~Group,
+        colors       = "Set3",
+        text         = ~Species,
+        textposition = "top right",
+        showlegend   = FALSE,
+        hoverinfo    = "none"
+      ) %>%
+      # Layout: log-scale x-axis, custom y-axis, annotations
+      layout(
+        title = list(
+          text = paste0(
+            "Microplastics Species Sensitivity Distribution",
+            "<br><span style='font-size:14px'>(ERM = ", ERM_check_ssd, ")</span>"
+          )
+        ),
+        xaxis = list(
+          type  = "log",
+         # tickformat    = ".0e",  # Forces scientific notation with 2 decimal places
+          exponentformat= "e",     # Style of exponent (common choices: 'none','e','E','power','SI')
+          title = if (ERM_check_ssd == "Unaligned") {
+            paste0(dose_check_ssd, " (Unaligned)")
+          } else {
+            paste0(dose_check_ssd, " (", lower_length_ssd, " to ", upper_fmt, " µm)")
+          }
+        ),
+        yaxis = list(
+          title      = "Species Affected (%)",
+          range      = c(0, 1),
+          tickformat = ".0%"
+        ),
+        annotations = list(
+          # (1) Hazard Confidence Level annotation at the relevant data point
+          list(
+            x = log10(as.numeric(aoc_hc$est_format)),                 # data coordinate for x
+            y = aoc_hc$percent / 100,       # data coordinate for y
+            xref = "x", 
+            yref = "y",
+            text = paste0(aoc_hc$percent, "% Hazard Confidence Level", "<br>",
+                          aoc_hc$est_format, " ", dose_check_ssd),
+            showarrow = TRUE,
+            arrowhead = 7,
+            arrowcolor = "red",        # ARROW IS NOW RED
+            #ax = -40,                        # shift the label slightly in pixels
+            ay = -100,
+            font = list(color = "red", size = 14)
+          )
+        )
+      )
+    
+    ssdplotly
+  })
+  
+  # render ssd plotly #
+  output$aoc_ssd_plotly <- renderPlotly({
+    ssd_plotly()
   })
   
   # SSD Table
