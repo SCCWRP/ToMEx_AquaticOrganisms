@@ -6718,9 +6718,9 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                 minConcEffect = min(dose_new), meanConcEffect = mean(dose_new, na.rm = T), 
                 medianConcEffect = median(dose_new, na.rm = T), SDConcEffect = sd(dose_new, na.rm = T),
                 MaxConcEffect = max(dose_new), 
-                CI95_LCL = exp(log(meanConcEffect) - 1.96 * sd(log(dose_new)) / sqrt(n())),  # Log-transformed LCL
+                CI95_LCL = meanConcEffect - 1.96 * sd(dose_new) / sqrt(n()),  
                 firstQuartileConcEffect = quantile(dose_new, 0.25, na.rm = TRUE),
-                CI95_UCL = exp(log(meanConcEffect) + 1.96 * sd(log(dose_new)) / sqrt(n())),  # Log-transformed UCL
+                CI95_UCL = meanConcEffect + 1.96 * sd(dose_new) / sqrt(n()),  
                 thirdQuartileConcEffect = quantile(dose_new, 0.75), 
                 CountEffect = n(), 
                 MinEffectType = lvl1_f[which.min(dose_new)], 
