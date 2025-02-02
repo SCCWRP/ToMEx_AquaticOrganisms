@@ -497,10 +497,55 @@ rename_with(~ gsub(" |[?]|[(]|[)]|-|/|\\^", ".",.x), everything()) %>% ### repla
     polymer == "pristine tire wear particles (P-TWP)" ~ "Tire Wear",
     polymer == "Sodium Polyacrylate" ~ "Sodium Polyacrylate",
     polymer == "Starch/PBAT/PLA" ~ "Starch/Polybutylene Adipate Terephthalate/Polylactic Acid"))) %>% 
-  rename(poly_f = polymer) %>%  
+  rename(poly_f = polymer) %>% 
   #Rename density column
   rename(density.g.cm3 = density..g.cm.3.) %>% 
-  rename(density.reported.estimated = density..reported.estimated.) %>% 
+  rename(density.reported.estimated = density..reported.estimated.)
+  
+tomex2.0_aoc_setup$poly_f = fct_collapse(tomex2.0_aoc_setup$poly_f,
+                                                 "Polyamide" = c("Polyamide", "Polyamide 66"),
+                                                 "Polyethylene vinyl acetate" = c("Polyethylene (co-Vinyl acetate)", "Polyethylene Vinyl Acetate"),
+                                                 "Not Reported" = "Not Reported",
+                                                 "Polystyrene" = "Latex")
+
+tomex2.0_aoc_setup$poly_f = fct_na_value_to_level(tomex2.0_aoc_setup$poly_f, "Not Reported")
+
+#Calculate the median density for each polymer
+median_density_by_polymer = tomex2.0_aoc_setup %>%
+  group_by(poly_f) %>%
+  summarize(median_density = median(density.g.cm3, na.rm = TRUE)) %>% 
+  ungroup()
+
+#Join the mean temperature back to the original data
+tomex2.0_aoc_setup = left_join(tomex2.0_aoc_setup, median_density_by_polymer, by = "poly_f")
+
+#Fill NA values of density.g.cm.3. with the calculated median per polymer type
+tomex2.0_aoc_setup = tomex2.0_aoc_setup %>%
+  mutate(density.g.cm3 = ifelse(is.na(density.g.cm3), median_density, density.g.cm3))
+
+#Remove the temporary column median_density
+tomex2.0_aoc_setup = tomex2.0_aoc_setup %>% select(-median_density)
+
+#Identify unique Polymers with NA values in density.g.cm3
+na_polymer = unique(tomex2.0_aoc_setup$poly_f[is.na(tomex2.0_aoc_setup$density.g.cm3)])
+
+# Convert to character and sort the unique species alphabetically
+na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
+na_polymer # >>> check the density in the literature
+
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "High Density Polyethylene"] = 0.953
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Poly(Styrene-co-acrylonitrile)"] = 1.08
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "polyethylene_vinyl_acetate"] = 0.953
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polyisoprene"] = 0.905
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polytetrafluoroethylene"] = 2.2
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polyurethane"] = 1.19
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polyvinyl Acetate"] = 1.19
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Polyvinylchloride/vinylacetate co-polymer"] = 1.38
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Sodium Polyacrylate"] = 1.32
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Starch/Polybutylene Adipate Terephthalate/Polylactic Acid"] = 1.05
+tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Tire Wear"] = 1.45
+
+  tomex2.0_aoc_setup <- tomex2.0_aoc_setup %>% 
   #Factor shape
   mutate(shape = factor(shape)) %>% 
   rename(shape_f = shape) %>%  
@@ -923,15 +968,6 @@ tomex2.0_aoc_setup_final$target.cell.tissue  = fct_collapse(tomex2.0_aoc_setup_f
 
 tomex2.0_aoc_setup_final$target.cell.tissue = fct_na_value_to_level(tomex2.0_aoc_setup_final$target.cell.tissue , "Not Reported")
 
-#polymer
-tomex2.0_aoc_setup_final$poly_f = fct_collapse(tomex2.0_aoc_setup_final$poly_f,
-"Polyamide" = c("Polyamide", "Polyamide 66"),
-"Polyethylene vinyl acetate" = c("Polyethylene (co-Vinyl acetate)", "Polyethylene Vinyl Acetate"),
-"Not Reported" = "Not Reported",
-"Polystyrene" = "Latex")
-
-tomex2.0_aoc_setup_final$poly_f = fct_na_value_to_level(tomex2.0_aoc_setup_final$poly_f, "Not Reported")
-
 # exclude Polyamidoamine -> not MP
 tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final[tomex2.0_aoc_setup_final$poly_f != "Polyamidoamine", ]
 
@@ -1015,42 +1051,6 @@ tomex2.0_aoc_setup_final$size.width.um.used.for.conversions[tomex2.0_aoc_setup_f
 #Add 1 as sample size for Algae, Bacterium, Cyanobacteria, Plant, and Mixed
 tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>%
   mutate(sample.size = ifelse(org_f %in% c("Algae", "Bacterium", "Cyanobacteria", "Dinoflagellate"), 1, sample.size))
-
-#Calculate the median density for each polymer
-median_density_by_polymer = tomex2.0_aoc_setup_final %>%
-  group_by(poly_f) %>%
-  summarize(median_density = median(density.g.cm3, na.rm = TRUE)) %>% 
-  ungroup()
-
-#Join the mean temperature back to the original data
-tomex2.0_aoc_setup_final = left_join(tomex2.0_aoc_setup_final, median_density_by_polymer, by = "poly_f")
-
-#Fill NA values of density.g.cm.3. with the calculated median per polymer type
-tomex2.0_aoc_setup_final = tomex2.0_aoc_setup_final %>%
-  mutate(density.g.cm3 = ifelse(is.na(density.g.cm3), median_density, density.g.cm3))
-
-#Remove the temporary column median_density
-tomex2.0_aoc_setup_final = tomex2.0_aoc_setup_final %>% select(-median_density)
-
-#Identify unique Polymers with NA values in density.g.cm3
-na_polymer = unique(tomex2.0_aoc_setup_final$poly_f[is.na(tomex2.0_aoc_setup_final$density.g.cm3)])
-
-# Convert to character and sort the unique species alphabetically
-na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
-na_polymer # >>> check the density in the literature
-
-#
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "High Density Polyethylene"] = "0.953"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Poly(Styrene-co-acrylonitrile)"] = "1.08"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "polyethylene_vinyl_acetate"] = "0.953"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyisoprene"] = "0.905"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polytetrafluoroethylene"] = "2.2"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyurethane"] = "1.19"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyvinyl Acetate"] = "1.19"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyvinylchloride/vinylacetate co-polymer"] = "1.38"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Sodium Polyacrylate"] = "1.32"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Starch/Polybutylene Adipate Terephthalate/Polylactic Acid"] = "1.05"
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Tire Wear"] = "1.45"
 
 # Restructure temp column
 tomex2.0_aoc_setup_final$media.temp = as.numeric(tomex2.0_aoc_setup_final$media.temp)
