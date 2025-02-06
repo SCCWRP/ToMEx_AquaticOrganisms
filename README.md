@@ -9,30 +9,7 @@ ToMEx 2.0 Application deployed at: https://sccwrp.shinyapps.io/tomex_20_aquatic_
 
 **Contributors**
 
-ToMEx 1.0:
-Leah Thornton Hampton, Southern California Coastal Water Research Project<br />
-Heili Lowman, University of Nevada, Reno<br />
-Scott Coffin, State Water Resources Control Board of California<br />
-Emily Darin, Southern California Coastal Water Research Project<br />
-Ezra Miller, San Francisco Estuary Institute<br />
-Ludovic Hermabessiere, University of Toronto<br />
-Hannah de Frond, University of Toronto<br />
-Vera de Ruitjer, Wageningen University<br />
-Samreen Siddiqui, Oregon State University<br />
-Andrea Faltynkova, Norwegian University of Science and Technology<br />
-Johannes Völker, Norwegian University of Science and Technology<br />
-Laura Monclús Anglada, Norwegian University of Science and Technology<br />
-Sydney Kotar, Southern California Coastal Water Research Project<br />
-Win Cowger, Moore Institute for Plastic Pollution Research<br />
-Susanne Brander, Oregon State University<br />
-Martin Wagner, Norwegian University of Science and Technology<br />
-Bart Koelmans, Wageningen University<br />
-Chelsea Rochman, University of Toronto<br />
-Alvine Mehinto, Southern California Coastal Water Research Project<br />
-Steve Weisberg, Southern California Coastal Water Research Project<br />
-
-ToMEx 2.0:
-Coming Soon!
+See web application homepage
 
 **Primary Contact**
 
