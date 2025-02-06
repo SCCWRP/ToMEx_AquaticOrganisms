@@ -548,8 +548,12 @@ tabItem(tabName = "Screening",
                    actionButton("reset_quality", "Reset Filters", icon("redo"), style="color: #fff; background-color: #f39c12; border-color: #d68910")), 
             
         ), #close box
+        
+        box(title = "Barplot", status = "primary", width = 12, collapsible = T,
+            plotlyOutput("quality_barplotly", height = "700px"),
+            ),
 
-        box(title = "Visualize Data", status = "primary", width = 12,
+        box(title = "Heatmap", status = "primary", width = 12, collapsible = T,
             
             p("Use the cursor to zoom and hover over the plot to view additional information about each study. Some studies are not visible until zoomed in. 
               Alternatively, specific studies may be selected using the filter in the 'Study Screening' tab above."),
@@ -557,9 +561,9 @@ tabItem(tabName = "Screening",
             p("'Red Criteria' are indicated by (*). Scores of 0, 1, and 2 are respresented by red, grey, and blue tiles respectively."),
             br(),
             
-            plotlyOutput("tech_plotly", height = "600px"), 
+            plotlyOutput("tech_plotly", height = "800px"), 
             
-            plotlyOutput("risk_plotly", height = "600px")
+            plotlyOutput("risk_plotly", height = "800px")
                
         ), #close box
         
@@ -2168,6 +2172,80 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
      
    })
    
+   #### Barplots for quality screening data ###
+   quality_barplotly <- eventReactive(list(input$go_quality),{
+    
+    df_plot <- quality_filtered() %>%
+    #  df_plot <- aoc_quality %>% 
+       # For each combination of Category, Criterion, Score, and Study, count the distinct studies.
+       group_by(Category_f, Criteria_f, Score_f, Score) %>%
+       summarise(n_studies = n_distinct(Study_plus), .groups = "drop")
+     
+     # Create an ordering variable based solely on the n_studies for Score_f == "Adequate" (Score == 2)
+     order_df <- df_plot %>% 
+       filter(Score_f == "Adequate") %>% 
+       select(Category_f, Criteria_f, n_studies) %>% 
+       rename(adequate_n_studies = n_studies)
+     
+     # Merge the ordering info back into the original dataset.
+     df_plot <- df_plot %>% 
+       left_join(order_df, by = c("Category_f", "Criteria_f"))
+     
+     # Reorder Criteria_f within each Category_f based on the adequate_n_studies value.
+     # Using .desc = TRUE to order from highest to lowest.
+     df_plot <- df_plot %>% 
+       mutate(Criteria_f = fct_reorder(Criteria_f, adequate_n_studies, .desc = F))
+     
+     # Create the stacked bar plot 
+     p <- ggplot(df_plot, aes(x = n_studies, y = Criteria_f, fill = Score_f,
+                              text = paste0("<b>Category:</b> ", Category_f, "<br>",
+                                            "<b>Criteria:</b> ", Criteria_f, "<br>",
+                                            "<b>Score Category:</b> ", Score_f, "<br>",
+                                            "<b>Studies:</b> ", n_studies))) +
+       geom_bar(position = "stack", stat = "identity") +
+       facet_wrap(~ Category_f, ncol = 2, scales = "free_y") +
+       scale_fill_manual(
+         values = c("Inadequate"                 = "tomato",
+                    "Adequate with Restrictions" = "ivory3",
+                    "Adequate"                   = "dodgerblue")
+       ) +
+       labs(
+         x = "Number of Studies",
+         y = "",
+         fill = "Score",
+         title = ""
+       ) +
+       theme_minimal(base_size = 15) +
+       theme(
+         #strip.text = element_text(size = 14),
+         #axis.text = element_text(size = 10),
+         legend.position = "top"
+       )
+     
+     # Convert the ggplot chart to an interactive Plotly plot.
+     plotly_fig <- ggplotly(p, tooltip = "text") %>% 
+       layout(
+       legend = list(
+         orientation = "h",   # horizontal legend
+         x = 0.5,             # centered on x-axis
+         xanchor = "center",
+         y = 1.1             # adjust the y position (below plot)
+       ),
+     margin = list(
+       t = 100                  # add bottom margin to avoid overlap with legend/title
+     )     
+     )
+     
+     # Display the Plotly figure.
+     plotly_fig
+             })
+   
+   #Render plotly
+   output$quality_barplotly <- renderPlotly({
+     quality_barplotly()
+   })
+   
+   #### Heatmaps for quality screening data ####
    #Create plot for quality screening scores from quality_filtered data
    tech_plotly <- eventReactive(list(input$go_quality),{
      
@@ -2188,8 +2266,16 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
      # colnames(tech)<- gsub(" \\(10.*", "",colnames(tech))
      # colnames(tech)<- gsub(" \\(doi.*", "",colnames(tech))
      
-     tech <- tech %>% 
-       as.matrix()
+     # Calculate the total scores for each study (column)
+     tech_df <- as.data.frame(tech)
+     study_totals <- colSums(tech_df, na.rm = TRUE)
+     
+     # Order the studies based on the total score (decreasing order)
+     ordered_studies <- names(sort(study_totals, decreasing = TRUE))
+     tech <- tech[, ordered_studies]
+     
+     # Convert the reordered data to a matrix for Plotly
+     tech <- as.matrix(tech)
      
      #make plotly
      tech_p <- plot_ly(x=colnames(tech), y=rownames(tech), z = tech,
@@ -2243,8 +2329,16 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
      # colnames(risk)<- gsub(" \\(10.*", "",colnames(risk))
      # colnames(risk)<- gsub(" \\(doi.*", "",colnames(risk))
      
-     risk <- risk %>% 
-       as.matrix()
+     # Calculate the total scores for each study (column)
+     risk_df <- as.data.frame(risk)
+     study_totals <- colSums(risk_df, na.rm = TRUE)
+     
+     # Order the studies based on the total score (decreasing order)
+     ordered_studies <- names(sort(study_totals, decreasing = TRUE))
+     risk <- risk[, ordered_studies]
+     
+     # Convert the reordered data to a matrix for Plotly
+     risk <- as.matrix(risk)
      
      #make plotly
      risk_p <- plot_ly(x=colnames(risk), y=rownames(risk), z = risk, 
