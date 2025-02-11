@@ -34,6 +34,9 @@ library(stats)
 library(caret) # for random forest predictions
 library(randomForest) # for random forest predictions
 
+# ensure correct version of ssdtools is installed
+#install.packages("https://cran.r-project.org/src/contrib/Archive/ssdtools/ssdtools_0.3.7.tar.gz", repos=NULL, type="source")
+
 # Load finalized dataset (prepped in RDAmaker.R)
 aoc <- readRDS("aoc_setup_tomex2.RDS")
 aoc_endpoint <- readRDS("aoc_endpoint_tomex2.RDS")
@@ -798,6 +801,12 @@ tabItem(tabName = "Exploration",
                                           label = "Ecologically Relevant Metric:",
                                           choices = c("Unaligned","Particles", "Surface Area", "Volume", "Mass", "Specific Surface Area"),
                                           selected = "Unaligned")),
+                      
+                      # Conditional Panel: Show all other inputs only if ERM_check is NOT "Unaligned"
+                      conditionalPanel(
+                        condition = "input.ERM_check != 'Unaligned'",
+                        
+                        
                       column(width = 12,
                              strong("Starting alpha values are for marine surface water reported in ", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)")),
                              br(),
@@ -882,6 +891,7 @@ tabItem(tabName = "Exploration",
                              numericInput(inputId = "upper.tissue.trans.size.um",
                                                   label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
                                                   value = 83))),
+                ) #Close COnditionalPaneel
                       
              ) #close tabpanel  
              
@@ -1177,6 +1187,10 @@ tabItem(tabName = "SSD",
                                                         label = "Ecologically Relevant Metric:",
                                                         choices = c("Unaligned","Particles", "Surface Area", "Volume", "Mass", "Specific Surface Area"),
                                                         selected = "Volume")),
+                          # Conditional Panel: Show all other inputs only if ERM_check is NOT "Unaligned"
+                          conditionalPanel(
+                            condition = "input.ERM_check_ssd != 'Unaligned'",
+                          
                                     column(width = 12,
                                     strong("Starting alpha values are for marine surface water reported in ", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)")),
                                     br(),
@@ -1261,6 +1275,7 @@ tabItem(tabName = "SSD",
                                               label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
                                               value = 83))
                           ) # close fluidrow
+                        ) #Close ConditionalPanel
                           
                      ), #close tabpanel  
                      
