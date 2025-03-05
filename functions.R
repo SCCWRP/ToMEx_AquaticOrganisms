@@ -4,7 +4,11 @@
 #surface area equation for elongated spheres (fragments)
 SAfnx = function(a, # length
                  b, # width
-                 c){ # height
+                 c){ # height\
+  # a, b, and c are equivalent to 1/2th of the length, width, and height, respectively
+  a <- 0.5 * a
+  b <- 0.5 * b
+  c <- 0.5 * c
   SA = 4*pi*(((a*b)^1.6 + (a*c)^1.6 + (b*c)^1.6) / 3)^(1/1.6)
   return(SA)}
 

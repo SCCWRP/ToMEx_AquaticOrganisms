@@ -693,7 +693,7 @@ tomex2.0_aoc_setup <- tomex2.0 %>%
     #annotate whether max size ingest was estimated or reported (all estiamted here)
     mutate(max.size.ingest.reported.estimated = "estimated") %>% 
     #calculate maximum ingestible size (if not already in database)
-    mutate(max.size.ingest.mm = 10^(beta_log10_body_length * log10(body.length.cm) - body_length_intercept) * 10) %>% #(Jâms, et al 2020 Nature paper)correction for cm to mm
+    mutate(max.size.ingest.mm = 10^(beta_log10_body_length * log10(body.length.cm * 10) - body_length_intercept)) %>% #(Jâms, et al 2020 Nature paper)correction for cm to mm
     mutate(max.size.ingest.um = 1000 * max.size.ingest.mm)
 
   bodysize_summary <- bind_rows(bodysize_summary,bodysize_addons)

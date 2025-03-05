@@ -2561,6 +2561,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+      # ensure algae are never considered for food dilution
+      mutate(EC_env_v.particles.mL = case_when(
+        Group == "Algae" ~ NA,
+        T ~ EC_env_v.particles.mL)) %>% 
       
       # Mass ERM #
       ##--- environmental calculations ---###
@@ -4613,6 +4617,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+      # ensure algae are never considered for food dilution
+      mutate(EC_env_v.particles.mL = case_when(
+        Group == "Algae" ~ NA,
+        T ~ EC_env_v.particles.mL)) %>% 
       
       # Mass ERM #
       ##--- environmental calculations ---###
@@ -5805,6 +5813,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+      # ensure algae are never considered for food dilution
+      mutate(EC_env_v.particles.mL = case_when(
+        Group == "Algae" ~ NA,
+        T ~ EC_env_v.particles.mL)) %>% 
       
       # Mass ERM #
       ##--- environmental calculations ---###
@@ -7891,6 +7903,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+      # ensure algae are never considered for food dilution
+      mutate(EC_env_v.particles.mL = case_when(
+        Group == "Algae" ~ NA,
+        T ~ EC_env_v.particles.mL)) %>% 
       
       #### mass ERM ###
       ##--- environmental calculations ---###

@@ -742,7 +742,7 @@ tomex2.0_aoc_setup$density.g.cm3[tomex2.0_aoc_setup$poly_f == "Tire Wear"] = 1.4
     #annotate whether max size ingest was estimated or reported (all estiamted here)
     mutate(max.size.ingest.reported.estimated = "estimated") %>% 
     #calculate maximum ingestible size (if not already in database)
-    mutate(max.size.ingest.mm = 10^(0.9341 * log10(body.length.cm) - 1.1200) * 10) %>% #(Jamm et al 2020 Nature paper)correction for cm to mm
+    mutate(max.size.ingest.mm = 10^(0.9341 * log10(body.length.cm * 10) - 1.1200)) %>% #(Jamm et al 2020 Nature paper)correction for cm to mm
     mutate(max.size.ingest.um = 1000 * max.size.ingest.mm)
 
   bodysize_summary <- bind_rows(bodysize_summary,bodysize_addons)

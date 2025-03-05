@@ -697,7 +697,7 @@ aoc_setup <- aoc_v1 %>% # start with original dataset
   )) %>% 
   #calculate maximum ingestible size (if not already in database)
   mutate(max.size.ingest.mm = ifelse(is.na(max.size.ingest.mm), 
-                                     10^(beta_log10_body_length * log10(body.length.cm) - body_length_intercept) * 10,  #(Jamm et al 2020 Nature paper)correction for cm to mm
+                                     10^(beta_log10_body_length * log10(body.length.cm * 10) - body_length_intercept),  #(Jamm et al 2020 Nature paper)correction for cm to mm
                                      max.size.ingest.mm)) %>%  # if already present, just use that
   mutate(max.size.ingest.um = 1000 * max.size.ingest.mm) %>%  #makes it less confusing below
   #Make factor for experiment type
