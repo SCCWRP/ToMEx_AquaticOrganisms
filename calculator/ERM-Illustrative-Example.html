@@ -11,7 +11,6 @@
 
 <meta name="author" content="Scott Coffin, Ph.D." />
 
-<meta name="date" content="2024-01-09" />
 
 <title>Aligning Microplastics Toxicity Data using Ecologically Relevant Metrics - An Illustrative Example</title>
 
@@ -1582,7 +1581,7 @@ border-radius: 0px;
 <h1 class="title toc-ignore">Aligning Microplastics Toxicity Data using
 Ecologically Relevant Metrics - An Illustrative Example</h1>
 <h4 class="author">Scott Coffin, Ph.D.</h4>
-<h4 class="date">01/09/2024</h4>
+<h4 class="date">03/5/2025</h4>
 
 </div>
 
@@ -1620,25 +1619,46 @@ will be considered to be unavailable.</p>
 example. Studies in the database are filtered for all ‘red’ criteria,
 and only organismal and population-level biological organizations are
 considered, then default assessment metrics are applied.</p>
-<pre class="r"><code>aoc_z &lt;- readRDS(file = &quot;Tox Data/aoc_z.Rda&quot;)
+<pre class="r"><code># aoc_z &lt;- readRDS(&quot;../data/input/aoc_z_tomex2.RDS&quot;)
+# 
+# POD &lt;- aoc_z %&gt;% 
+#   filter(Species == &quot;Ceriodaphnia dubia&quot;,
+#          effect.metric == &quot;NOEC&quot;,
+#          tier_zero_tech_f == &quot;Red Criteria Passed&quot;,
+#          tier_zero_risk_f == &quot;Red Criteria Passed&quot;,
+#          lvl1_f == &quot;Fitness&quot;,
+#          bio_f %in% c(&quot;Organism&quot;, &quot;Population&quot;),
+#          polydispersity == &quot;monodisperse&quot;
+#          ) %&gt;% 
+#   mutate(body.length.mm = body.length.cm * 10,
+#          max.size.ingest.mm = 10^(0.9341 * log10(body.length.mm) - 1.1200)) %&gt;% #(Jâms, et al 2020 Nature paper)correction for cm to mm
+#     mutate(max.size.ingest.um = 1000 * max.size.ingest.mm) %&gt;% 
+#   filter(max.size.ingest.um &gt; size.length.um.used.for.conversions) %&gt;% 
+#   mutate(dose_new = dose.particles.mL.master / (af.time * af.noec)) %&gt;%  
+#   drop_na(dose_new) %&gt;% 
+#   mutate(dose_new = dose_new * 1000) %&gt;% 
+#  filter(dose_new == min(dose_new, na.rm = TRUE)) %&gt;% 
+#   distinct(dose_new, .keep_all = T)
+# 
+# write.csv(POD, &quot;../data/output/illustrative_example.csv&quot;)
 
-EC_mono &lt;- aoc_z %&gt;% 
-  filter(species == &quot;magna&quot;) %&gt;% 
-  filter(effect.metric == &quot;NOEC&quot;) %&gt;% 
-  filter(tier_zero_tech_f == &quot;Red Criteria Passed&quot;,
-         tier_zero_risk_f == &quot;Red Criteria Passed&quot;,
-         bio_f %in% c(&quot;Organism&quot;, &quot;Population&quot;)) %&gt;% 
-         mutate(dose_new = dose.particles.mL.master / (af.time * af.noec)) %&gt;%  
-         drop_na(dose_new) %&gt;% 
-         mutate(dose_new = dose_new * 1000) %&gt;% 
-  summarize(min.NOEC.particles.L = min(dose_new)) %&gt;% 
-  as.numeric()</code></pre>
+POD &lt;-  read.csv(&quot;../data/output/illustrative_example.csv&quot;)</code></pre>
 <p>The resulting real-life example of a <em>monodisperse</em> effect
-concentration is for a of a 40 um PE fragment for <em>C. Daphnia</em>.
-The minimum NOEC for acute mortality endpoints from these studies
-is:</p>
-<pre class="r"><code>paste(&quot;40 um PE fragment Monodisperse Effect Concentration (C. Daphnia, acute mortality):&quot;, EC_mono, &quot;(particles/L)&quot;)</code></pre>
-<pre><code>## [1] &quot;40 um PE fragment Monodisperse Effect Concentration (C. Daphnia, acute mortality): 562.3413252 (particles/L)&quot;</code></pre>
+concentration is for a of a 2 um PE sphere for <em>C. Daphnia</em>. The
+minimum NOEC for fitness-related endpoints from these studies is:</p>
+<pre class="r"><code>particle.size = POD$size.length.um.used.for.conversions
+particle.shape = as.character(POD$shape_f)
+polymer = as.character(POD$poly_f)
+dispersity = POD$polydispersity
+effect.type = as.character(POD$lvl3_f)
+effect.metric = as.character(POD$effect.metric)
+species = as.character(POD$Species)
+exposure.conc.particles.L = as.numeric(POD$dose_new)
+max.size.ingest.um = POD$max.size.ingest.um
+
+paste(effect.type, effect.metric, &quot;for&quot;, species, &quot;exposed to&quot;,  exposure.conc.particles.L, 
+      &quot;particles/L of&quot;, dispersity, particle.size, &quot;um&quot;, particle.shape, polymer, &quot;microplastics&quot;)</code></pre>
+<pre><code>## [1] &quot;Number of Offspring NOEC for Ceriodaphnia dubia exposed to 1600 particles/L of monodisperse 2 um Sphere Polyethylene microplastics&quot;</code></pre>
 <p>In order to convert the <em>monodisperse</em> effect concentration to
 a <em>polydisperse</em> mixture of microplastic particles, a correction
 must occur which takes into consideration the ecologically relevant
@@ -1650,7 +1670,7 @@ of ERM remains the same (Koelmans et al, 2020).</p>
 \mu_{x,mono}\)</span></p>
 <p>In this example of a monodisperse effect concentration for
 <em>C.Daphnia</em>, <span class="math inline">\(EC_{mono}\)</span> is in
-particle count per volume (i.e. 1e+05 particles/L), and <span class="math inline">\(\mu_{x,mono}\)</span> is the mean value of the ERM
+particle count per volume (i.e. 27 particles/L), and <span class="math inline">\(\mu_{x,mono}\)</span> is the mean value of the ERM
 of interest in this study, which in the case of particle count, is
 1.</p>
 <pre class="r"><code>mu_x.mono = 1</code></pre>
@@ -1658,35 +1678,78 @@ of interest in this study, which in the case of particle count, is
 <span class="math inline">\(\mu_{x,poly}\)</span> may be calculated
 using the following equation (equation 4, Kooi et al 2021):</p>
 <p><span class="math inline">\(\mu_{x,poly} = \frac{1 - a_{x}}{2 -
-a_{x}} \frac{X^{2-a_x}_{UL} - X^{2-a_x}_{LL}}{X^{1-a_x}_{UL} -
+a_{x}}  \frac{X^{2-a_x}_{UL} - X^{2-a_x}_{LL}}{X^{1-a_x}_{UL} -
 X^{1-a_x}_{LL}}\)</span></p>
 <p>Where <span class="math inline">\(a_x\)</span> relates to the power
 law distribution of microplastic particles in the marine environment
-(i.e. particle length; 2.07; Kooi et al 2021), and UL and LL are the
-upper and lower limits of bioavailability for this species/life
-stage/effect metric, respectively.</p>
+(i.e. particle length; 2.07; <a href="https://doi.org/10.1016/j.watres.2021.117429">Kooi et al
+2021</a>), and UL and LL are the upper and lower limits of
+bioavailability for this species/life stage/effect metric,
+respectively.</p>
 <p>In this example, the organism of interest is <em>Cerodaphnia
-magna</em>, which has an average body length of 0.5 cm, and an estimated
-maximum ingestible particle width of 115 um particles based on average
-mouth size opening. Therefore, <span class="math inline">\(L_{UL,m}\)</span> would be equivalent to 115 um,
-and <span class="math inline">\(L_{LL,m}\)</span> would be the lower
-size range of the bin for which the SSD is built- in this example, 1 um
-as a lower limit.</p>
+magna</em>, which has an average body length of 0.14 cm, and an
+estimated maximum ingestible particle size of 104 um particles based on
+estimated mouth size opening using the allometric model provided in <a href="https://doi.org/10.1038/s41467-020-15406-6">Jâms et
+al. (2020)</a>. Therefore, <span class="math inline">\(L_{UL,m}\)</span>
+would be equivalent to 104 um, and <span class="math inline">\(L_{LL,m}\)</span> would be the lower size range of
+the bin for which the SSD is built- in this example, 1 um as a (default)
+lower limit.</p>
 <p>Note that if bioavailability for an ERM of interest is based on a
 different parameter (for example, tissue translocation potential), <span class="math inline">\(L_{UL,m}\)</span> would be equivalent to that
 size. A default assumption for an upper limit of tissue translocation
-for this exercise is 10 um.</p>
+for this exercise is 88 um based on the assessment of translocatable MP
+sizes in Coffin et al. (In Progress).</p>
 <p><span class="math inline">\(\mu_{x,poly}\)</span> for particles for
-the 1-115 um fraction in the marine environment is then calculated:</p>
-<pre class="r"><code>###### if alpha does not equal 2 #####
-mux.polyfnx = function(a.x, 
-                       x_UL, 
-                       x_LL){
-  mux.poly = ((1-a.x)/(2-a.x)) * ((x_UL^(2-a.x) - x_LL^(2-a.x))/(x_UL^(1-a.x) - x_LL^(1-a.x)))
-  return(mux.poly)}
+the 1-104 um fraction in the marine environment is then calculated:</p>
+<pre class="r"><code>### Generalizable function that works on any value (alpha == 1 and == 2 are limits!)
+mux_polyfnx &lt;- function(a.x, x_UL, x_LL) {
+  # Validate inputs
+  if (length(a.x) != length(x_UL) || length(a.x) != length(x_LL)) {
+    stop(&quot;a.x, x_UL, and x_LL must have the same length.&quot;)
+  }
+
+  # Initialize result vector
+  mux.poly &lt;- numeric(length(a.x))
+
+  # Loop through each element to handle row-by-row logic
+  for (i in seq_along(a.x)) {
+    if (is.na(a.x[i]) || is.na(x_UL[i]) || is.na(x_LL[i])) {
+      # Handle NA values
+      mux.poly[i] &lt;- NA
+    } else if (a.x[i] == 1) {
+      # Special case: a.x == 1
+      if (x_UL[i] &gt; 0 &amp;&amp; x_LL[i] &gt; 0) {
+        mux.poly[i] &lt;- (x_UL[i] - x_LL[i]) / log(x_UL[i] / x_LL[i])
+      } else {
+        mux.poly[i] &lt;- NA  # Invalid input for log
+      }
+    } else if (a.x[i] == 2) {
+      # Special case: a.x == 2
+      epsilon &lt;- 1e-10  # Small value to avoid division by zero
+      if (x_UL[i] &gt; 0 &amp;&amp; x_LL[i] &gt; 0) {
+        mux.poly[i] &lt;- log(x_UL[i] / x_LL[i]) /
+          ((x_LL[i] + epsilon)^-1 - (x_UL[i] + epsilon)^-1)
+      } else {
+        mux.poly[i] &lt;- NA  # Invalid input for log
+      }
+    } else {
+      # General case: a.x != 1 and a.x != 2
+      if (x_UL[i] &gt; 0 &amp;&amp; x_LL[i] &gt; 0) {
+        mux.poly[i] &lt;- ((1 - a.x[i]) / (2 - a.x[i])) *
+          ((x_UL[i]^(2 - a.x[i]) - x_LL[i]^(2 - a.x[i])) /
+             (x_UL[i]^(1 - a.x[i]) - x_LL[i]^(1 - a.x[i])))
+      } else {
+        mux.poly[i] &lt;- NA  # Invalid input for power calculations
+      }
+    }
+  }
+
+  # Return the result
+  return(mux.poly)
+}
 
 #define parameters for C.daphnia
-upper.ingestible.length.um = 115 #mouth size opening
+upper.ingestible.length.um = max.size.ingest.um #mouth size opening
 upper.ingestible.width.um = upper.ingestible.length.um # * R.ave #length to width ratio
 lower.ingestible.length.um = 1
 lower.ingestible.width.um = lower.ingestible.length.um #* R.ave
@@ -1695,26 +1758,26 @@ lower.ingestible.width.um = lower.ingestible.length.um #* R.ave
 alpha = 2.07
 
 #compute
-mu_x.poly &lt;- mux.polyfnx(a.x = alpha, 
+mu_x.poly &lt;- mux_polyfnx(a.x = alpha, 
                          x_UL = upper.ingestible.width.um,
                          x_LL = lower.ingestible.width.um)
 #report
 paste(&quot;mu_x_poly:&quot;, round(mu_x.poly,2))</code></pre>
-<pre><code>## [1] &quot;mu_x_poly: 4.35&quot;</code></pre>
+<pre><code>## [1] &quot;mu_x_poly: 4.27&quot;</code></pre>
 <p>Now that <span class="math inline">\(\mu_{x,poly}\)</span>, <span class="math inline">\(\mu_{x,mono}\)</span>, and <span class="math inline">\(EC_{mono}\)</span> are known for this example, the
 <em>bioavailable</em> <em>polydisperse</em> effect concentration <span class="math inline">\(EC_{poly}\)</span> may then be calculated using
 the equation:</p>
 <p><span class="math inline">\(EC_{poly} = \frac{EC_{mono} *
 \mu_{x,mono}}{\mu_{x,poly}}\)</span></p>
-<pre class="r"><code>EC_poly &lt;- (EC_mono * mu_x.mono)/mu_x.poly
+<pre class="r"><code>EC_poly &lt;- (POD$dose_new * mu_x.mono)/mu_x.poly
 paste(&quot;EC_poly:&quot;,signif(EC_poly,5), &quot;particles/L&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_poly: 129.36 particles/L&quot;</code></pre>
+<pre><code>## [1] &quot;EC_poly: 374.59 particles/L&quot;</code></pre>
 <p>Now that the <em>bioavailable</em>, <em>polydisperse</em> effect
 concentration is known for this example, in order to relate this
 threshold effect concentration to an <em>environmentally relevant</em>
 (e.g. 1 - 5,000 um) range of particles (<span class="math inline">\(EC_{env}\)</span>; particles/L) a further
-correction must occur using the following equation (equation 2; Kooi et
-al 2021):</p>
+correction must occur using the following equation (equation 2; <a href="https://doi.org/10.1016/j.watres.2021.117429">Kooi et al
+2021</a>):</p>
 <p><span class="math inline">\(EC_{env} = EC_{poly} *
 CF_{bio}\)</span></p>
 <p>Where <span class="math inline">\(CF_{bio}\)</span> is a
@@ -1724,16 +1787,18 @@ concentration (particles/L) to an environmentally relevant concentration
 for the microplastics default (D) size range (e.g. 1 to 5,000 um)
 according to the power law distribution for length (L) with slope <span class="math inline">\(\alpha_L\)</span> in Table S4 of Kooi et al
 (2021). <span class="math inline">\(CF_{bio}\)</span> is calculated as
-follows (Kooi et al 2021):</p>
+follows <a href="https://doi.org/10.1016/j.watres.2021.117429">Kooi et
+al 2021</a>:</p>
 <p><span class="math inline">\(CF_{bio} = \frac{L^{1-a}_{UL,D} -
 L^{1-a}_{LL,D}}{L^{1-a}_{UL,B} - L^{1-a}_{LL,B}}\)</span></p>
 <p>In this example, the organism of interest is <em>Cerodaphnia
-magna</em>, which has an average body length of 0.5 cm, and an estimated
-maximum ingestible size range of 115 um particles, <span class="math inline">\(L_{UL,B}\)</span> would be equivalent to 115 um,
+magna</em>, which has an average body length of 0.14 cm, and an
+estimated maximum ingestible size range of 104 um particles, <span class="math inline">\(L_{UL,B}\)</span> would be equivalent to 104 um,
 and <span class="math inline">\(L_{LL,B}\)</span> would be the lower
 size range of the bin for which the SSD is built- in this example, 1 um
-as a lower limit. Further, the upper limit (UL,D) and lower limit (LL,D)
-of the default size range are 5,000 and 1 um, respectively.</p>
+as a lower (default) limit. Further, the upper limit (UL,D) and lower
+limit (LL,D) of the default size range are 5,000 and 1 um,
+respectively.</p>
 <pre class="r"><code>#function to derive correction factor (CF) from Koelmans et al (equation 2)
 CFfnx = function(a, #default alpha from Koelmans et al (2020)
                  x2D, #set detault values to convert ranges to (1-5,000 um) #5mm is upper defuault 
@@ -1748,7 +1813,7 @@ CFfnx = function(a, #default alpha from Koelmans et al (2020)
 alpha = alpha #table s4 for freshwater surface water
 x2D_set = 5000
 x1D_set = 1
-x2M = 115
+x2M = max.size.ingest.um
 x1M = 1
 
 # calculate CF_bio
@@ -1758,12 +1823,12 @@ CF_bio &lt;- CFfnx(a = alpha,
                 x1M = x1M, 
                 x2M = x2M)
 paste(&quot;CF_bio = &quot;,signif(CF_bio,4), &quot;(unitless)&quot;)</code></pre>
-<pre><code>## [1] &quot;CF_bio =  1.006 (unitless)&quot;</code></pre>
+<pre><code>## [1] &quot;CF_bio =  1.007 (unitless)&quot;</code></pre>
 <p>Finally, the <span class="math inline">\(EC_{env}\)</span> is
 calculated for particles/L as an ERM:</p>
 <pre class="r"><code>EC_env &lt;- EC_poly * CF_bio
 paste(&quot;EC_env = &quot;,signif(EC_env,4), &quot;Particles/L (1-5,000 um; marine surface water )&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_env =  130.2 Particles/L (1-5,000 um; marine surface water )&quot;</code></pre>
+<pre><code>## [1] &quot;EC_env =  377.2 Particles/L (1-5,000 um; marine surface water )&quot;</code></pre>
 </div>
 <div id="volume-ingestion" class="section level3" number="1.1.2">
 <h3><span class="header-section-number">1.1.2</span> Volume
@@ -1778,8 +1843,8 @@ axes, corresponding to one-half times the length, width, and height of
 an ellipsoid. Upper and lower limits of bioavailability for volume
 correspond to the maximum ingestible size of particles and the lower
 limit of the size range to be aligned to (typically 1 micron).</p>
-<!-- ![Ellipsoid Volume](www/ellipsoid_volume.JPG) -->
-<p>Image source: Wikipedia.com</p>
+<p>&lt;– <a href="www/ellipsoid_volume.jpg">Ellipsoid Volume</a> –&gt;
+Image source: Wikipedia.com</p>
 <p>The above equation can be applied to fragments, thin films,
 microbeads, spheres, or fibers given a known length to width ratios for
 such shapes, with the height assumed to be equivalent to 0.67 x width
@@ -1794,69 +1859,83 @@ to width ratio of a particles, the formula simplifies to:</p>
 <p>Where <span class="math inline">\(L_i\)</span> is the length of the
 particle (um) and <span class="math inline">\(R_i\)</span> is the
 width:length ratio of the particle (unitless).</p>
-<p>For the example of a 40 um PE fragment, the length was reported
-(<span class="math inline">\(L_i = 40 \mu m\)</span>), however the width
-was not reported by the authors, so a default value of 0.77 is used,
-which is the average for marine surface water (<span class="math inline">\(R_i = 0.77\)</span>).</p>
+<p>For the example of a 2 um PE sphere, the length was reported (<span class="math inline">\(L_i = 2 \mu m\)</span>), and since the particle is
+spherical - the width is therefore equivalent to the length. If, for
+example, a fragment was used and the width was not reported by the
+authors, a default value of 0.77 (length to width ratio) would be used,
+which is the average for marine surface water (<span class="math inline">\(R_i = 0.77\)</span>) as reported in Kooi et
+al. (2021).</p>
 <p><span class="math inline">\(\mu_{v,mono}\)</span> is calculated:</p>
-<pre class="r"><code>volumefnx_mono = function(R, L){
-  volume = 0.111667 * pi * R^2 * L^3 #assumes height = 0.67 * Width, and Width:Length ratio is &#39;R&#39; (compartment-specific)
-return(volume)}
+<pre class="r"><code># equation for volume (polydisperese particles)
+volumefnx_poly = function(width, length){
+  height = width #0.67 * width #heigth = width produces an ellipsoid
+  volume = (4/3) * pi * (length/2) * (width/2) * (height/2) 
+  return(volume)}
 
-mu_v.mono = volumefnx_mono(R = 0.77,
-                      L = 40)
+#Volume equation for elongated sphere (fragments)
+volumefnx = function(R, L){
+  volume = 0.111667 * pi * R^2 * L^3 #assumes height = 0.67 * Width, and Width:Length ratio is &#39;R&#39; (0.77 average in marine surface water)
+  return(volume)}
+
+#equation for fibers (cylinder) V = pi*r^2*h (where r = particle width/2 and h = particle length). Assume 15 um if width not reported (kooi et al 2021)
+volumefnx_fiber = function(width, length){
+  radius = width/2
+  volume = pi * (radius) ^ 2 * length
+  return(volume)
+}
+
+R.ave &lt;- 0.77 #marine average length to width ratio of particles
+
+mu_v.mono &lt;- POD %&gt;% 
+  # conditional logic to estimate particle volume based on shape
+ mutate(particle.volume.um3 = case_when(shape_f == &quot;Sphere&quot; ~ (4/3)*pi*((size.length.um.used.for.conversions/2)^3),
+                                         shape_f == &quot;Fiber&quot; &amp; is.na(size.width.um.used.for.conversions) ~ 
+                                          volumefnx_fiber(width = 15, length = size.length.um.used.for.conversions),  #assume 15 um as width (kooi et al 2021)
+                                         shape_f == &quot;Fiber&quot; &amp; !is.na(size.width.um.used.for.conversions) ~ 
+                                          volumefnx_fiber(width = size.width.um.used.for.conversions, length = size.length.um.used.for.conversions), #if width reported
+                                         shape_f == &quot;Fragment&quot; ~ volumefnx(R = R.ave, L = size.length.um.used.for.conversions))) %&gt;% 
+  pull(particle.volume.um3)
+
+
 paste(&quot;mu_v.mono = &quot;, signif(mu_v.mono,3), &quot;um^3&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_v.mono =  13300 um^3&quot;</code></pre>
+<pre><code>## [1] &quot;mu_v.mono =  4.19 um^3&quot;</code></pre>
 <p><span class="math inline">\(\mu_{v,poly}\)</span> is then calculated
 using the volume of particles that are bioaccessible (based on mouth
 opening and particle length), the volume of particles for the lower
 limit of the size range of interest.</p>
 <p>As discussed above, for the example of an organism of interest of
 <em>Cerodaphnia magna</em>, the estimated maximum ingestible size range
-is 115 um particles, <span class="math inline">\(L_{UL,m}\)</span> would
-be equivalent to 115 um, and <span class="math inline">\(L_{LL,m}\)</span> would be the lower size range of
+is 104 um particles, <span class="math inline">\(L_{UL,m}\)</span> would
+therefore be equivalent to 104 um, and <span class="math inline">\(L_{LL,m}\)</span> would be the lower size range of
 the bin for which the SSD is built- in this example, 1 um as a lower
 limit. Volumetric limits are calculated:</p>
-<pre class="r"><code>#note that the upper length for the polydiserpse volume should be 5,000 um
-volumefnx_poly = function(width, length){
-  height = width
-  volume = (4/3) * pi * (length/2) * (width/2) * (height/2) #assumes height = 0.67 * Width 
-  return(volume)}
-
-# R.ave = 0.77
-# 
-# x_LL_v = volumefnx(R = R.ave,
-#                       L = lower.ingestible.width.um)
-# x_UL_v = volumefnx(R = R.ave,
-#                       L = upper.ingestible.width.um)
-
-x_LL_v = volumefnx_poly(width = lower.ingestible.width.um,
+<pre class="r"><code>x_LL_v = volumefnx_poly(width = lower.ingestible.width.um,
                       length = lower.ingestible.length.um)
 x_UL_v = volumefnx_poly(width = upper.ingestible.width.um,
                       length = upper.ingestible.length.um)
 
 
-paste(&quot;x_UL_v = &quot;,signif(x_UL_v,3), &quot;um^3&quot;,
-      &quot;;x_LL_v = &quot;, signif(x_LL_v,3), &quot;um^3&quot;)</code></pre>
-<pre><code>## [1] &quot;x_UL_v =  796000 um^3 ;x_LL_v =  0.524 um^3&quot;</code></pre>
+paste(&quot;x_UL_v = &quot;, scales::comma(x_UL_v), &quot;um^3;&quot;,
+      &quot;x_LL_v = &quot;, signif(x_LL_v,3), &quot;um^3&quot;)</code></pre>
+<pre><code>## [1] &quot;x_UL_v =  586,804 um^3; x_LL_v =  0.524 um^3&quot;</code></pre>
 <p><span class="math inline">\(\mu_{v,poly}\)</span> may now be
 calculated given these limits, using an alpha value of 1.48 for volume
 in the marine surface water environment (Kooi et al 2021):</p>
 <pre class="r"><code>a.v = 1.48
 #compute
-mu_v.poly &lt;- mux.polyfnx(a.x = a.v, 
+mu_v.poly &lt;- mux_polyfnx(a.x = a.v, 
                          x_UL = x_UL_v,
                          x_LL = x_LL_v)
 #report
 paste(&quot;mu_v_poly:&quot;, round(mu_v.poly,2), &quot;um^3&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_v_poly: 792.74 um^3&quot;</code></pre>
+<pre><code>## [1] &quot;mu_v_poly: 676.4 um^3&quot;</code></pre>
 <p>Now that <span class="math inline">\(\mu_{v,poly}\)</span>, <span class="math inline">\(\mu_{v,mono}\)</span>, and <span class="math inline">\(EC_{mono}\)</span> are known for this example for
 volume, the <em>bioavailable</em> <em>polydisperse</em> effect
 concentration <span class="math inline">\(EC_{poly}\)</span> for the
 volume ERM may then be calculated:</p>
-<pre class="r"><code>EC_poly_v &lt;- (EC_mono * mu_v.mono)/mu_v.poly
+<pre class="r"><code>EC_poly_v &lt;- (exposure.conc.particles.L * mu_v.mono)/mu_v.poly
 paste(&quot;EC_poly_v:&quot;,signif(EC_poly_v,5), &quot;particles/L&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_poly_v: 9442.9 particles/L&quot;</code></pre>
+<pre><code>## [1] &quot;EC_poly_v: 9.9084 particles/L&quot;</code></pre>
 <p>Again, to relate this <em>bioavailable</em>, <em>polydisperse</em>
 effect threshold (<span class="math inline">\(EC_{poly,v}\)</span>) to
 an environmentally relevant <em>polydisperse</em> mixture of particles
@@ -1865,8 +1944,8 @@ the threshold to the size range of interest (e.g. 1-5,000 um) using
 <span class="math inline">\(CF_{bio}\)</span>, identical as for
 particles.</p>
 <pre class="r"><code>EC_env_v &lt;- EC_poly_v * CF_bio
-paste(&quot;EC_env_v = &quot;,signif(EC_env_v,4), &quot;Particles/L (1-5,000 um; marine surface water )&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_env_v =  9501 Particles/L (1-5,000 um; marine surface water )&quot;</code></pre>
+paste(&quot;EC_env_v = &quot;,signif(EC_env_v,3), &quot;Particles/L (1-5,000 um; marine surface water )&quot;)</code></pre>
+<pre><code>## [1] &quot;EC_env_v =  9.98 Particles/L (1-5,000 um; marine surface water )&quot;</code></pre>
 </div>
 <div id="surface-area-translocation" class="section level3" number="1.1.3">
 <h3><span class="header-section-number">1.1.3</span> Surface Area
@@ -1879,64 +1958,89 @@ follows:</p>
 (\frac{(ab)^{1.6} + (ac)^{1.6} + (bc)^{1.6}}{3})^{1/1.6}\)</span></p>
 <p>With a, b, c being equal to 0.5x length, 0.5x width, and 0.5x height,
 respectively.</p>
-<p>For the example of a 40 um PE fragment, the length was reported
-(<span class="math inline">\(a = 0.5* 40 \mu m\)</span>), however the
-width was not reported by the authors, so a default value of 0.77 is
-used (<span class="math inline">\(b = 0.5 * 0.77 * 40 \mu m\)</span>),
-which is the average for marine surface water, and height is assumed to
-be 0.67 times the width (<span class="math inline">\(c = 0.5 * 0.77 *
-0.67 * 40 \mu m\)</span>) (Kooi et al 2021). Surface area is
-calculated:</p>
-<pre class="r"><code>#surface area equation
-SAfnx = function(a,
-                 b,
-                 c){
+<p>For the example of a 2 um PE sphere, the length was reported (<span class="math inline">\(a = 0.5* 2 \mu m\)</span>), and since the particle
+is a sphere, width and height are also equal to this value. In the case
+of a fragment or fiber, however, the width may be estimated as being
+0.77 is used (<span class="math inline">\(b = 0.5 * 0.77 * 2 \mu
+m\)</span>), which is the average length to width ratio for MPs in
+marine surface water (Kooi et al. 2021), with the height assumed to be
+0.67 times the width (<span class="math inline">\(c = 0.5 * 0.77 * 0.67
+* 2 \mu m\)</span>) (Kooi et al 2021). Surface area is calculated:</p>
+<pre class="r"><code>#### Particle Characteristics Equations ####
+#surface area equation for elongated spheres (fragments)
+SAfnx = function(a, # length
+                 b, # width
+                 c){ # height\
+  # a, b, and c are equivalent to 1/2th of the length, width, and height, respectively
+  a &lt;- 0.5 * a
+  b &lt;- 0.5 * b
+  c &lt;- 0.5 * c
   SA = 4*pi*(((a*b)^1.6 + (a*c)^1.6 + (b*c)^1.6) / 3)^(1/1.6)
-    return(SA)}
+  return(SA)}
+
+#cylinder equation for SA. S = 2pi*r*h + 2pi*r^2, where r = width/2 and h = length 
+SAfnx_fiber = function(width, length){
+  radius = width / 2
+  SA = 2*pi*radius*length + 2*pi*radius^2
+  return(SA)
+}
+
 #calculate for 10 um fragment
-mu_sa.mono = SAfnx(a = 0.5 * 40,
-                   b = 0.5 * 0.77 * 40,
-                   c = 0.5 * 0.77 * 0.67 * 40)
+mu_sa.mono = POD %&gt;% 
+  mutate(particle.surface.area.um2 = case_when(shape_f == &quot;Sphere&quot; ~ 
+                                                 SAfnx(a = size.length.um.used.for.conversions,
+                                                       b = size.length.um.used.for.conversions,
+                                                       c = size.length.um.used.for.conversions),
+                                             shape_f == &quot;Fiber&quot; &amp; is.na(size.width.um.used.for.conversions) ~ 
+                                               SAfnx_fiber(width = 15, length = size.length.um.used.for.conversions), #assum 15 um width (kooi et al 2021)
+                                             shape_f == &quot;Fiber&quot; &amp; !is.na(size.width.um.used.for.conversions) ~ 
+                                               SAfnx_fiber(width = size.width.um.used.for.conversions, length = size.length.um.used.for.conversions), #if width is known
+                                             shape_f == &quot;Fragment&quot; ~
+                                               SAfnx(a = size.length.um.used.for.conversions,
+                                                                         b = R.ave * size.length.um.used.for.conversions,
+                                                                         c = R.ave * 0.67 * size.length.um.used.for.conversions))) %&gt;% 
+  pull(particle.surface.area.um2)
+  
 
 paste(&quot;mu_sa.mono = &quot;, signif(mu_sa.mono,3), &quot;um^2&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_sa.mono =  2880 um^2&quot;</code></pre>
+<pre><code>## [1] &quot;mu_sa.mono =  12.6 um^2&quot;</code></pre>
 <p>Since the probability distribution of ERM <span class="math inline">\(sa\)</span> (surface area) follows a power law
 regime, the mean ERM value for the polydisperse particles, <span class="math inline">\(\mu_{sa,poly}\)</span>, can be calculated. For
 surface area of environmentally disperse particles, UL and LL are
 calculated using the equation for the surface area of an ellipsoid
 (above).</p>
-<pre class="r"><code>upper.tissue.trans.size.um = 83 #um
-# calculate lower
-x_LL_sa = SAfnx(a = 0.5 * lower.ingestible.length.um, #length
-                b = 0.5 * lower.ingestible.width.um, #width
-                c = 0.5 * lower.ingestible.width.um) #height = 0.67 * width
+<pre class="r"><code>upper.tissue.trans.size.um = 88 #um
+# calculate lower ingestible surface area
+x_LL_sa = SAfnx(a = lower.ingestible.length.um, #length
+                b = lower.ingestible.width.um, #width
+                c = lower.ingestible.width.um) #height = 0.67 * width
 
-# calculate upper
-x_UL_sa = SAfnx(a = 0.5 * upper.tissue.trans.size.um, #()
-                b = 0.5 * upper.tissue.trans.size.um, #()
-                c = 0.5 * upper.tissue.trans.size.um)
+# calculate upper tissue translocatable surface area
+x_UL_sa = SAfnx(a = upper.tissue.trans.size.um, #()
+                b = upper.tissue.trans.size.um, #()
+                c = upper.tissue.trans.size.um)
 
-paste(&quot;x_UL = &quot;,round(x_UL_sa,2), &quot;um^2&quot;,
+paste(&quot;x_UL = &quot;, scales::comma(x_UL_sa,2), &quot;um^2&quot;,
       &quot;;x_LL = &quot;, round(x_LL_sa,2), &quot;um^2&quot;)</code></pre>
-<pre><code>## [1] &quot;x_UL =  21642.43 um^2 ;x_LL =  3.14 um^2&quot;</code></pre>
+<pre><code>## [1] &quot;x_UL =  24,328 um^2 ;x_LL =  3.14 um^2&quot;</code></pre>
 <p><span class="math inline">\(\mu_{sa,poly}\)</span> may now be
-calculated given these limits, using an alpha value of 1.98 for surface
+calculated given these limits, using an alpha value of 1.5 for surface
 area in the marine surface water environment (Kooi et al 2021):</p>
 <pre class="r"><code>a.sa = 1.5
 #compute
-mu_sa.poly &lt;- mux.polyfnx(a.x = a.sa, 
+mu_sa.poly &lt;- mux_polyfnx(a.x = a.sa, 
                          x_UL = x_UL_sa,
                          x_LL = x_LL_sa)
 #report
 paste(&quot;mu_sa_poly:&quot;, round(mu_sa.poly,2), &quot;um^2&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_sa_poly: 260.75 um^2&quot;</code></pre>
+<pre><code>## [1] &quot;mu_sa_poly: 276.46 um^2&quot;</code></pre>
 <p>Now that <span class="math inline">\(\mu_{v,poly}\)</span>, <span class="math inline">\(\mu_{v,mono}\)</span>, and <span class="math inline">\(EC_{mono}\)</span> are known for this example for
 surface area, the <em>bioavailable</em> <em>polydisperse</em> effect
 concentration <span class="math inline">\(EC_{poly}\)</span> for the
 surface area ERM may then be calculated:</p>
-<pre class="r"><code>EC_poly_sa &lt;- (EC_mono * mu_sa.mono)/mu_sa.poly
+<pre class="r"><code>EC_poly_sa &lt;- (exposure.conc.particles.L * mu_sa.mono)/mu_sa.poly
 paste(&quot;EC_poly_sa:&quot;,signif(EC_poly_sa,5), &quot;particles/L&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_poly_sa: 6219.7 particles/L&quot;</code></pre>
+<pre><code>## [1] &quot;EC_poly_sa: 72.727 particles/L&quot;</code></pre>
 <p>Again, to relate this <em>bioavailable</em>, <em>polydisperse</em>
 effect threshold (<span class="math inline">\(EC_{poly,sa}\)</span>) to
 an environmentally relevant <em>polydisperse</em> mixture of particles
@@ -1946,7 +2050,7 @@ using <span class="math inline">\(CF_{bio}\)</span>, identical as for
 particles.</p>
 <pre class="r"><code>EC_env_sa &lt;- EC_poly_sa * CF_bio
 paste(&quot;EC_env_sa = &quot;,signif(EC_env_sa,4), &quot;Particles/L (1-5,000 um; marine surface water )&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_env_sa =  6258 Particles/L (1-5,000 um; marine surface water )&quot;</code></pre>
+<pre><code>## [1] &quot;EC_env_sa =  73.23 Particles/L (1-5,000 um; marine surface water )&quot;</code></pre>
 </div>
 <div id="mass-translocation" class="section level3" number="1.1.4">
 <h3><span class="header-section-number">1.1.4</span> Mass
@@ -1959,18 +2063,21 @@ pV*\frac{1}{1e12}*1e6\)</span></p>
 <em>V</em> is volume (um^3) - which is calculated by the cube of the
 radius of each particle (i.e. 1/2 * length, or 2.5 um), and additional
 conversion factors for g to ug (1e6) and cm^3 to um^3 (1e-12).</p>
-<p>For the example of a 40 um polyethylene fragment, the volume was
-calculated above (~ <span class="math inline">\(207 um^3\)</span>), and
-the density of polyethylene was is estimated to be 0.935 g/cm^3. <span class="math inline">\(\mu_{x,mono}\)</span> is calculated:</p>
+<pre class="r"><code>density.g.cm3 &lt;- POD$density.g.cm3
+paste(polymer, &quot;density:&quot;, density.g.cm3, &quot;g/cm^3&quot;)</code></pre>
+<pre><code>## [1] &quot;Polyethylene density: 0.987 g/cm^3&quot;</code></pre>
+<p>For the example of a 2 um polyethylene sphere, the volume was
+calculated above (~ <span class="math inline">\(4.2 um^3\)</span>), and
+the density of polyethylene was is estimated to be 0.987 g/cm^3. <span class="math inline">\(\mu_{x,mono}\)</span> is calculated:</p>
 <pre class="r"><code>massfnx_mono = function(R, L, p){
   mass = p * #density (g/cm^3)
     0.111667 * pi * R^2 * L^3 * # volume (um^3): assumes height = 0.67 * Width, and Width:Length ratio is &#39;R&#39; (compartment-specific)
     1/1e12 * 1e6 #correction factor
   return(mass)}
 
-mu_m.mono &lt;- massfnx_mono(R = 0.77,  L = 40, p = 0.935)
+mu_m.mono &lt;- massfnx_mono(R = R.ave,  L = particle.size, p = density.g.cm3)
 paste(&quot;mu_m,mono:&quot;, signif(mu_m.mono,3),&quot;ug&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_m,mono: 0.0124 ug&quot;</code></pre>
+<pre><code>## [1] &quot;mu_m,mono: 1.64e-06 ug&quot;</code></pre>
 <p>Since the probability distribution of ERM <span class="math inline">\(m\)</span> (mass) follows a power law regime, the
 mean ERM value for the polydisperse particles, <span class="math inline">\(\mu_{m,poly}\)</span>, can be calculated by first
 calculating the lower and upper ingestible masses of particles based on
@@ -2007,25 +2114,25 @@ x_UL_m = massfnx_poly(width = upper.tissue.trans.size.um,
 
 paste(&quot;x_UL = &quot;,signif(x_UL_m,2), &quot;ug&quot;,
       &quot;;x_LL = &quot;, signif(x_LL_m,2), &quot;ug&quot;)</code></pre>
-<pre><code>## [1] &quot;x_UL =  0.33 ug ;x_LL =  5.8e-07 ug&quot;</code></pre>
+<pre><code>## [1] &quot;x_UL =  0.39 ug ;x_LL =  5.8e-07 ug&quot;</code></pre>
 <p><span class="math inline">\(\mu_{m,poly}\)</span> may now be
 calculated given these limits, using an alpha value of <span class="math inline">\(a_m\)</span> of 1.32 for the marine surface water
 environment (Kooi et al 2021):</p>
 <pre class="r"><code>a.m = 1.32
 #compute
-mu_m.poly &lt;- mux.polyfnx(a.x = a.m, 
+mu_m.poly &lt;- mux_polyfnx(a.x = a.m, 
                          x_UL = x_UL_m,
                          x_LL = x_LL_m)
 #report
 paste(&quot;mu_m_poly:&quot;, signif(mu_m.poly,2), &quot;ug&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_m_poly: 0.0023 ug&quot;</code></pre>
+<pre><code>## [1] &quot;mu_m_poly: 0.0025 ug&quot;</code></pre>
 <p>Now that <span class="math inline">\(\mu_{m,poly}\)</span>, <span class="math inline">\(\mu_{m,mono}\)</span>, and <span class="math inline">\(EC_{mono}\)</span> are known for this example for
 mass, the <em>bioavailable</em> <em>polydisperse</em> effect
 concentration <span class="math inline">\(EC_{poly}\)</span> for the
 mass ERM may then be calculated:</p>
-<pre class="r"><code>EC_poly_m &lt;- (EC_mono * mu_m.mono)/mu_m.poly
+<pre class="r"><code>EC_poly_m &lt;- (exposure.conc.particles.L * mu_m.mono)/mu_m.poly
 paste(&quot;EC_poly_m:&quot;,signif(EC_poly_m,5), &quot;particles/L&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_poly_m: 3096.4 particles/L&quot;</code></pre>
+<pre><code>## [1] &quot;EC_poly_m: 1.0325 particles/L&quot;</code></pre>
 <p>Again, to relate this <em>bioavailable</em>, <em>polydisperse</em>
 effect threshold (<span class="math inline">\(EC_{poly,sa}\)</span>) to
 an environmentally relevant <em>polydisperse</em> mixture of particles
@@ -2035,13 +2142,13 @@ the threshold to the size range of interest (e.g. 1-5,000 um) using
 particles.</p>
 <pre class="r"><code>EC_env_m &lt;- EC_poly_m * CF_bio
 paste(&quot;EC_env_m = &quot;,signif(EC_env_m,4), &quot;Particles/L (1-5,000 um; marine surface water)&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_env_m =  3116 Particles/L (1-5,000 um; marine surface water)&quot;</code></pre>
+<pre><code>## [1] &quot;EC_env_m =  1.04 Particles/L (1-5,000 um; marine surface water)&quot;</code></pre>
 </div>
 <div id="specific-surface-area-translocation" class="section level3" number="1.1.5">
 <h3><span class="header-section-number">1.1.5</span> Specific Surface
 Area (Translocation)</h3>
 <p>In the case of an ERM of interest being specific surface area, <span class="math inline">\(\mu_{ssa,mono}\)</span> is equivalent to the
-surface area of a 5 um PS sphere (i.e. <span class="math inline">\(\mu_{sa,mono}\)</span>) divided by the mass
+surface area of a 2 um PE sphere (i.e. <span class="math inline">\(\mu_{sa,mono}\)</span>) divided by the mass
 (i.e. <span class="math inline">\(\mu_{m,mono}\)</span>), calculated as
 follows:</p>
 <p><span class="math inline">\(\mu_{sa,mono} = SSA =
@@ -2050,7 +2157,7 @@ follows:</p>
 <em>m</em> is the mass (ug).</p>
 <pre class="r"><code>mu_ssa.mono = mu_sa.mono/mu_m.mono
 paste(&quot;mu_ssa,mono:&quot;, formatC(mu_ssa.mono,format = &quot;e&quot;, digits = 2),&quot;um^2/ug&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_ssa,mono: 2.32e+05 um^2/ug&quot;</code></pre>
+<pre><code>## [1] &quot;mu_ssa,mono: 7.65e+06 um^2/ug&quot;</code></pre>
 <p>Since the probability distribution of the inverse of the ERM <span class="math inline">\(ssa\)</span> (specific surface area; i.e. 1/SSA)
 follows a power law regime, the mean ERM value for the polydisperse
 particles, <span class="math inline">\(\mu_{1/ssa,poly}\)</span>, can be
@@ -2078,20 +2185,20 @@ x_LL_ssa = SSA.inversefnx(sa = x_LL_sa, m = x_LL_m)
 x_UL_ssa = SSA.inversefnx(sa = x_UL_sa, m = x_UL_m)
 
 #report
-paste(&quot;x_UL_1/ssa = &quot;, signif(x_UL_ssa,3), &quot;ug/um^2&quot;,
-      &quot;;x_LL_1/ssa = &quot;, signif(x_LL_ssa,3), &quot;ug/um^2&quot;)</code></pre>
-<pre><code>## [1] &quot;x_UL_1/ssa =  1.52e-05 ug/um^2 ;x_LL_1/ssa =  1.83e-07 ug/um^2&quot;</code></pre>
+paste(&quot;x_UL_1/ssa = &quot;, signif(x_UL_ssa,3), &quot;ug/um^2;&quot;,
+      &quot;x_LL_1/ssa = &quot;, signif(x_LL_ssa,3), &quot;ug/um^2&quot;)</code></pre>
+<pre><code>## [1] &quot;x_UL_1/ssa =  1.61e-05 ug/um^2; x_LL_1/ssa =  1.83e-07 ug/um^2&quot;</code></pre>
 <p><span class="math inline">\(\mu_{m,poly}\)</span> may now be
 calculated given these limits, using an alpha value of <span class="math inline">\(a_ssa\)</span> of 1.98 for the marine surface
 water environment (Kooi et al 2021):</p>
 <pre class="r"><code>a.ssa = 1.98 # A_SSA for marine surface water
   
-mu_ssa.poly.inverse &lt;- mux.polyfnx(a.x = a.ssa, 
+mu_ssa.poly.inverse &lt;- mux_polyfnx(a.x = a.ssa, 
             x_UL = x_UL_ssa,
             x_LL = x_LL_ssa) 
 
 paste(&quot;mu_1/ssa,poly =&quot;,signif(mu_ssa.poly.inverse,3), &quot;ug/um^2&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_1/ssa,poly = 8.41e-07 ug/um^2&quot;</code></pre>
+<pre><code>## [1] &quot;mu_1/ssa,poly = 8.52e-07 ug/um^2&quot;</code></pre>
 <p>Now that <span class="math inline">\(\mu_{1/ssa,poly}\)</span>, <span class="math inline">\(\mu_{ssa,mono}\)</span>, and <span class="math inline">\(EC_{mono}\)</span> are known for this example for
 specific surface area, the <em>bioavailable</em> <em>polydisperse</em>
 effect concentration <span class="math inline">\(EC_{poly}\)</span> for
@@ -2099,11 +2206,11 @@ the specific surface area ERM may then be calculated by first taking the
 inverse of <span class="math inline">\(\mu_{1/ssa,poly}\)</span> to
 obtain <span class="math inline">\(\mu_{ssa,poly}\)</span>:</p>
 <pre class="r"><code>mu_ssa.poly &lt;- 1/mu_ssa.poly.inverse
-paste(&quot;mu_1/ssa,poly =&quot;,signif(mu_ssa.poly,3), &quot;um^2/ug&quot;)</code></pre>
-<pre><code>## [1] &quot;mu_1/ssa,poly = 1190000 um^2/ug&quot;</code></pre>
-<pre class="r"><code>EC_poly_ssa &lt;- (EC_mono * mu_ssa.mono)/mu_ssa.poly
-paste(&quot;EC_poly_ssa:&quot;,signif(EC_poly_ssa,5), &quot;particles/L&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_poly_ssa: 109.6 particles/L&quot;</code></pre>
+paste(&quot;mu_1/ssa,poly =&quot;,scales::comma(mu_ssa.poly,3), &quot;um^2/ug&quot;)</code></pre>
+<pre><code>## [1] &quot;mu_1/ssa,poly = 1,173,522 um^2/ug&quot;</code></pre>
+<pre class="r"><code>EC_poly_ssa &lt;- (exposure.conc.particles.L * mu_ssa.mono)/mu_ssa.poly
+paste(&quot;EC_poly_ssa:&quot;,scales::comma(EC_poly_ssa,5), &quot;particles/L&quot;)</code></pre>
+<pre><code>## [1] &quot;EC_poly_ssa: 10,430 particles/L&quot;</code></pre>
 <p>Again, to relate this <em>bioavailable</em>, <em>polydisperse</em>
 effect threshold (<span class="math inline">\(EC_{poly,ssa}\)</span>) to
 an environmentally relevant <em>polydisperse</em> mixture of particles
@@ -2112,8 +2219,8 @@ applied to rescale the threshold to the size range of interest
 (e.g. 1-5,000 um) using <span class="math inline">\(CF_{bio}\)</span>,
 identical as for particles.</p>
 <pre class="r"><code>EC_env_ssa &lt;- EC_poly_ssa * CF_bio
-paste(&quot;EC_env_ssa = &quot;,signif(EC_env_ssa,4), &quot;Particles/L (1-5,000 um; marine surface water)&quot;)</code></pre>
-<pre><code>## [1] &quot;EC_env_ssa =  110.3 Particles/L (1-5,000 um; marine surface water)&quot;</code></pre>
+paste(&quot;EC_env_ssa = &quot;,scales::comma(EC_env_ssa,4), &quot;Particles/L (1-5,000 um; marine surface water)&quot;)</code></pre>
+<pre><code>## [1] &quot;EC_env_ssa =  10,504 Particles/L (1-5,000 um; marine surface water)&quot;</code></pre>
 </div>
 </div>
 <div id="aligning-occurence-data-for-risk-characterization" class="section level2" number="1.2">
@@ -2157,16 +2264,18 @@ paste(&quot;CF_meas = &quot;,signif(CF_meas,4), &quot;(unitless)&quot;)</code></
 <pre><code>## [1] &quot;CF_meas =  470.3 (unitless)&quot;</code></pre>
 <p>The resulting correction factor (<span class="math inline">\(CF_{meas}\)</span> (unitless) is then multiplied
 by the measured concentration (<span class="math inline">\(C_{Meas}\)</span>) to obtain a rescaled exposure
-number concentration <span class="math inline">\(C_{Env} = CF_{meas} x
+number concentration <span class="math inline">\(C_{Env} =  CF_{meas} x
 C_{meas}\)</span>.</p>
 <pre class="r"><code>C_env &lt;- CF_meas * C_meas
-paste(&quot;C_env =&quot;,signif(C_env,4), &quot;particles/L (1 - 5,000 um; marine surface water)&quot;)</code></pre>
-<pre><code>## [1] &quot;C_env = 4703 particles/L (1 - 5,000 um; marine surface water)&quot;</code></pre>
+paste(&quot;C_env =&quot;,scales::comma(C_env,4), &quot;particles/L (1 - 5,000 um; marine surface water)&quot;)</code></pre>
+<pre><code>## [1] &quot;C_env = 4,704 particles/L (1 - 5,000 um; marine surface water)&quot;</code></pre>
 <p>This measured rescaled environmental concentration <span class="math inline">\(C_{env}\)</span> may then be directly compared to
 the rescaled effect thresholds for various ERM <span class="math inline">\(EC_{env,x}\)</span> to determine if risk is
 present using the traditional PNEC/PEC formula:</p>
-<pre class="r"><code>risk &lt;- tibble(&#39;ERM&#39; = c(&quot;Particles&quot;, &quot;Volume (Ingestion)&quot;, &quot;Surface Area (Translocation)&quot;, &quot;Mass (Translocation)&quot;, &quot;Specific Surface Area (Translocation)&quot;),
-               &#39;EC_env&#39; = c(EC_env, EC_env_v, EC_env_sa, EC_env_m, EC_env_ssa)) %&gt;% 
+<pre class="r"><code>risk &lt;- tibble(&#39;ERM&#39; = c(&quot;Unaligned&quot;,
+                         &quot;Volume (Ingestion)&quot;, &quot;Surface Area (Translocation)&quot;, &quot;Mass (Translocation)&quot;,
+                         &quot;Specific Surface Area (Translocation)&quot;),
+               &#39;EC_env&#39; = c(exposure.conc.particles.L, EC_env_v, EC_env_sa, EC_env_m, EC_env_ssa)) %&gt;% 
   mutate(&#39;PNEC/PEC&#39; =  C_env / EC_env)
 
 # build gt table
@@ -2176,9 +2285,8 @@ full_val_range_1 &lt;- risk %&gt;%
     range
 
 gt(risk) %&gt;% 
-  tab_header(title = &quot;1-5,000 um Thresholds (Aligned) Compared to Environmental Concentration
-             (4,703 particles/L)&quot;, 
-             subtitle = &quot;Thresholds presented in particles/L&quot;) %&gt;% 
+  tab_header(title = paste(&quot;1-5,000 um Thresholds (Aligned) Compared to Environmental Concentration (Rescaled)&quot;), 
+             subtitle = paste(&quot;Thresholds presented in particles/L. Re-scaled environmental concentration = &quot;, scales::comma(C_env), &quot;particles/L&quot;)) %&gt;% 
   fmt_number(columns = c(EC_env, &#39;PNEC/PEC&#39;),
              n_sigfig = 2,
              use_seps = TRUE) %&gt;% 
@@ -2189,20 +2297,20 @@ gt(risk) %&gt;%
       domain = full_val_range_1),
     alpha = 0.75) %&gt;% 
     tab_options(column_labels.hidden = FALSE) #%&gt;% </code></pre>
-<div id="djnhsjkzge" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
-<style>#djnhsjkzge table {
+<div id="ffobyiyrms" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#ffobyiyrms table {
 font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 -webkit-font-smoothing: antialiased;
 -moz-osx-font-smoothing: grayscale;
 }
-#djnhsjkzge thead, #djnhsjkzge tbody, #djnhsjkzge tfoot, #djnhsjkzge tr, #djnhsjkzge td, #djnhsjkzge th {
+#ffobyiyrms thead, #ffobyiyrms tbody, #ffobyiyrms tfoot, #ffobyiyrms tr, #ffobyiyrms td, #ffobyiyrms th {
 border-style: none;
 }
-#djnhsjkzge p {
+#ffobyiyrms p {
 margin: 0;
 padding: 0;
 }
-#djnhsjkzge .gt_table {
+#ffobyiyrms .gt_table {
 display: table;
 border-collapse: collapse;
 line-height: normal;
@@ -2227,11 +2335,11 @@ border-left-style: none;
 border-left-width: 2px;
 border-left-color: #D3D3D3;
 }
-#djnhsjkzge .gt_caption {
+#ffobyiyrms .gt_caption {
 padding-top: 4px;
 padding-bottom: 4px;
 }
-#djnhsjkzge .gt_title {
+#ffobyiyrms .gt_title {
 color: #333333;
 font-size: 125%;
 font-weight: initial;
@@ -2242,7 +2350,7 @@ padding-right: 5px;
 border-bottom-color: #FFFFFF;
 border-bottom-width: 0;
 }
-#djnhsjkzge .gt_subtitle {
+#ffobyiyrms .gt_subtitle {
 color: #333333;
 font-size: 85%;
 font-weight: initial;
@@ -2253,7 +2361,7 @@ padding-right: 5px;
 border-top-color: #FFFFFF;
 border-top-width: 0;
 }
-#djnhsjkzge .gt_heading {
+#ffobyiyrms .gt_heading {
 background-color: #FFFFFF;
 text-align: center;
 border-bottom-color: #FFFFFF;
@@ -2264,12 +2372,12 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#djnhsjkzge .gt_bottom_border {
+#ffobyiyrms .gt_bottom_border {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#djnhsjkzge .gt_col_headings {
+#ffobyiyrms .gt_col_headings {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -2283,7 +2391,7 @@ border-right-style: none;
 border-right-width: 1px;
 border-right-color: #D3D3D3;
 }
-#djnhsjkzge .gt_col_heading {
+#ffobyiyrms .gt_col_heading {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2302,7 +2410,7 @@ padding-left: 5px;
 padding-right: 5px;
 overflow-x: hidden;
 }
-#djnhsjkzge .gt_column_spanner_outer {
+#ffobyiyrms .gt_column_spanner_outer {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2313,13 +2421,13 @@ padding-bottom: 0;
 padding-left: 4px;
 padding-right: 4px;
 }
-#djnhsjkzge .gt_column_spanner_outer:first-child {
+#ffobyiyrms .gt_column_spanner_outer:first-child {
 padding-left: 0;
 }
-#djnhsjkzge .gt_column_spanner_outer:last-child {
+#ffobyiyrms .gt_column_spanner_outer:last-child {
 padding-right: 0;
 }
-#djnhsjkzge .gt_column_spanner {
+#ffobyiyrms .gt_column_spanner {
 border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
@@ -2330,10 +2438,10 @@ overflow-x: hidden;
 display: inline-block;
 width: 100%;
 }
-#djnhsjkzge .gt_spanner_row {
+#ffobyiyrms .gt_spanner_row {
 border-bottom-style: hidden;
 }
-#djnhsjkzge .gt_group_heading {
+#ffobyiyrms .gt_group_heading {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2358,7 +2466,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 text-align: left;
 }
-#djnhsjkzge .gt_empty_group_heading {
+#ffobyiyrms .gt_empty_group_heading {
 padding: 0.5px;
 color: #333333;
 background-color: #FFFFFF;
@@ -2372,13 +2480,13 @@ border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 vertical-align: middle;
 }
-#djnhsjkzge .gt_from_md > :first-child {
+#ffobyiyrms .gt_from_md > :first-child {
 margin-top: 0;
 }
-#djnhsjkzge .gt_from_md > :last-child {
+#ffobyiyrms .gt_from_md > :last-child {
 margin-bottom: 0;
 }
-#djnhsjkzge .gt_row {
+#ffobyiyrms .gt_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2396,7 +2504,7 @@ border-right-color: #D3D3D3;
 vertical-align: middle;
 overflow-x: hidden;
 }
-#djnhsjkzge .gt_stub {
+#ffobyiyrms .gt_stub {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2408,7 +2516,7 @@ border-right-color: #D3D3D3;
 padding-left: 5px;
 padding-right: 5px;
 }
-#djnhsjkzge .gt_stub_row_group {
+#ffobyiyrms .gt_stub_row_group {
 color: #333333;
 background-color: #FFFFFF;
 font-size: 100%;
@@ -2421,13 +2529,13 @@ padding-left: 5px;
 padding-right: 5px;
 vertical-align: top;
 }
-#djnhsjkzge .gt_row_group_first td {
+#ffobyiyrms .gt_row_group_first td {
 border-top-width: 2px;
 }
-#djnhsjkzge .gt_row_group_first th {
+#ffobyiyrms .gt_row_group_first th {
 border-top-width: 2px;
 }
-#djnhsjkzge .gt_summary_row {
+#ffobyiyrms .gt_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -2436,14 +2544,14 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#djnhsjkzge .gt_first_summary_row {
+#ffobyiyrms .gt_first_summary_row {
 border-top-style: solid;
 border-top-color: #D3D3D3;
 }
-#djnhsjkzge .gt_first_summary_row.thick {
+#ffobyiyrms .gt_first_summary_row.thick {
 border-top-width: 2px;
 }
-#djnhsjkzge .gt_last_summary_row {
+#ffobyiyrms .gt_last_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2452,7 +2560,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#djnhsjkzge .gt_grand_summary_row {
+#ffobyiyrms .gt_grand_summary_row {
 color: #333333;
 background-color: #FFFFFF;
 text-transform: inherit;
@@ -2461,7 +2569,7 @@ padding-bottom: 8px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#djnhsjkzge .gt_first_grand_summary_row {
+#ffobyiyrms .gt_first_grand_summary_row {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2470,7 +2578,7 @@ border-top-style: double;
 border-top-width: 6px;
 border-top-color: #D3D3D3;
 }
-#djnhsjkzge .gt_last_grand_summary_row_top {
+#ffobyiyrms .gt_last_grand_summary_row_top {
 padding-top: 8px;
 padding-bottom: 8px;
 padding-left: 5px;
@@ -2479,10 +2587,10 @@ border-bottom-style: double;
 border-bottom-width: 6px;
 border-bottom-color: #D3D3D3;
 }
-#djnhsjkzge .gt_striped {
+#ffobyiyrms .gt_striped {
 background-color: rgba(128, 128, 128, 0.05);
 }
-#djnhsjkzge .gt_table_body {
+#ffobyiyrms .gt_table_body {
 border-top-style: solid;
 border-top-width: 2px;
 border-top-color: #D3D3D3;
@@ -2490,7 +2598,7 @@ border-bottom-style: solid;
 border-bottom-width: 2px;
 border-bottom-color: #D3D3D3;
 }
-#djnhsjkzge .gt_footnotes {
+#ffobyiyrms .gt_footnotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -2503,7 +2611,7 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#djnhsjkzge .gt_footnote {
+#ffobyiyrms .gt_footnote {
 margin: 0px;
 font-size: 90%;
 padding-top: 4px;
@@ -2511,7 +2619,7 @@ padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#djnhsjkzge .gt_sourcenotes {
+#ffobyiyrms .gt_sourcenotes {
 color: #333333;
 background-color: #FFFFFF;
 border-bottom-style: none;
@@ -2524,68 +2632,74 @@ border-right-style: none;
 border-right-width: 2px;
 border-right-color: #D3D3D3;
 }
-#djnhsjkzge .gt_sourcenote {
+#ffobyiyrms .gt_sourcenote {
 font-size: 90%;
 padding-top: 4px;
 padding-bottom: 4px;
 padding-left: 5px;
 padding-right: 5px;
 }
-#djnhsjkzge .gt_left {
+#ffobyiyrms .gt_left {
 text-align: left;
 }
-#djnhsjkzge .gt_center {
+#ffobyiyrms .gt_center {
 text-align: center;
 }
-#djnhsjkzge .gt_right {
+#ffobyiyrms .gt_right {
 text-align: right;
 font-variant-numeric: tabular-nums;
 }
-#djnhsjkzge .gt_font_normal {
+#ffobyiyrms .gt_font_normal {
 font-weight: normal;
 }
-#djnhsjkzge .gt_font_bold {
+#ffobyiyrms .gt_font_bold {
 font-weight: bold;
 }
-#djnhsjkzge .gt_font_italic {
+#ffobyiyrms .gt_font_italic {
 font-style: italic;
 }
-#djnhsjkzge .gt_super {
+#ffobyiyrms .gt_super {
 font-size: 65%;
 }
-#djnhsjkzge .gt_footnote_marks {
+#ffobyiyrms .gt_footnote_marks {
 font-size: 75%;
 vertical-align: 0.4em;
 position: initial;
 }
-#djnhsjkzge .gt_asterisk {
+#ffobyiyrms .gt_asterisk {
 font-size: 100%;
 vertical-align: 0;
 }
-#djnhsjkzge .gt_indent_1 {
+#ffobyiyrms .gt_indent_1 {
 text-indent: 5px;
 }
-#djnhsjkzge .gt_indent_2 {
+#ffobyiyrms .gt_indent_2 {
 text-indent: 10px;
 }
-#djnhsjkzge .gt_indent_3 {
+#ffobyiyrms .gt_indent_3 {
 text-indent: 15px;
 }
-#djnhsjkzge .gt_indent_4 {
+#ffobyiyrms .gt_indent_4 {
 text-indent: 20px;
 }
-#djnhsjkzge .gt_indent_5 {
+#ffobyiyrms .gt_indent_5 {
 text-indent: 25px;
+}
+#ffobyiyrms .katex-display {
+display: inline-flex !important;
+margin-bottom: 0.75em !important;
+}
+#ffobyiyrms div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+height: 0px !important;
 }
 </style>
 <table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false">
   <thead>
     <tr class="gt_heading">
-      <td colspan="3" class="gt_heading gt_title gt_font_normal" style>1-5,000 um Thresholds (Aligned) Compared to Environmental Concentration
-             (4,703 particles/L)</td>
+      <td colspan="3" class="gt_heading gt_title gt_font_normal" style>1-5,000 um Thresholds (Aligned) Compared to Environmental Concentration (Rescaled)</td>
     </tr>
     <tr class="gt_heading">
-      <td colspan="3" class="gt_heading gt_subtitle gt_font_normal gt_bottom_border" style>Thresholds presented in particles/L</td>
+      <td colspan="3" class="gt_heading gt_subtitle gt_font_normal gt_bottom_border" style>Thresholds presented in particles/L. Re-scaled environmental concentration =  4,703 particles/L</td>
     </tr>
     <tr class="gt_col_headings">
       <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" scope="col" id="ERM">ERM</th>
@@ -2594,37 +2708,42 @@ text-indent: 25px;
     </tr>
   </thead>
   <tbody class="gt_table_body">
-    <tr><td headers="ERM" class="gt_row gt_left">Particles</td>
-<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(218,240,238,0.75); color: #000000;">130</td>
-<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(222,241,240,0.75); color: #000000;">36</td></tr>
+    <tr><td headers="ERM" class="gt_row gt_left">Unaligned</td>
+<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(160,216,210,0.75); color: #000000;">1,600</td>
+<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(224,242,241,0.75); color: #000000;">2.9</td></tr>
     <tr><td headers="ERM" class="gt_row gt_left">Volume (Ingestion)</td>
-<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(0,77,64,0.75); color: #FFFFFF;">9,500</td>
-<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(224,242,241,0.75); color: #000000;">0.50</td></tr>
+<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(224,242,241,0.75); color: #000000;">10</td>
+<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(206,234,232,0.75); color: #000000;">470</td></tr>
     <tr><td headers="ERM" class="gt_row gt_left">Surface Area (Translocation)</td>
-<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(0,138,124,0.75); color: #FFFFFF;">6,300</td>
-<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(224,242,241,0.75); color: #000000;">0.75</td></tr>
+<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(221,241,240,0.75); color: #000000;">73</td>
+<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(222,241,240,0.75); color: #000000;">64</td></tr>
     <tr><td headers="ERM" class="gt_row gt_left">Mass (Translocation)</td>
-<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(80,183,173,0.75); color: #000000;">3,100</td>
-<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(224,242,241,0.75); color: #000000;">1.5</td></tr>
+<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(224,242,241,0.75); color: #000000;">1.0</td>
+<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(44,168,156,0.75); color: #FFFFFF;">4,500</td></tr>
     <tr><td headers="ERM" class="gt_row gt_left">Specific Surface Area (Translocation)</td>
-<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(219,240,239,0.75); color: #000000;">110</td>
-<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(222,241,240,0.75); color: #000000;">43</td></tr>
+<td headers="EC_env" class="gt_row gt_right" style="background-color: rgba(0,77,64,0.75); color: #FFFFFF;">11,000</td>
+<td headers="PNEC/PEC" class="gt_row gt_right" style="background-color: rgba(224,242,241,0.75); color: #000000;">0.45</td></tr>
   </tbody>
   
   
 </table>
 </div>
 <pre class="r"><code>    #as_raw_html() # return as htmlk </code></pre>
-<p>In this case, the environmental concentration is nearly 5x lower than
-the effect threshold for particles, so exceedance of a NOEC for this
-particular endpoint/species (i.e. mortality,<em>C.Daphnia</em>) would
-not be expected to occur for that ERM. However, in the case of specific
-surface area as an ERM, risk is exceeded by a factor of 1.32.</p>
+<p>In this case, the environmental concentration is nearly 500x higher
+than the effect threshold for food dilution (i.e., volume-aligned;
+ingestion-restricted EC_env), so exceedance of a NOEC for this
+particular endpoint/species (i.e. Number of
+Offspring,<em>C.Daphnia</em>) would be expected to occur for that ERM.
+Risk based on the tissue-translocation mediated effect ERM (i.e.,
+surface-area aligned, translocation-restricted EC_env) is still expected
+to occur, however with a lower magnitude of exceedance than for food
+dilution. Other alignments (mass, specific surface area, unaligned) are
+simply shown for demonstrative purposes here, and their reliability has
+not been demonstrated yet.</p>
 <p>The above approach used for particles as an ecologically relevant
 metric may be applied for any other ecologically relevant metric for
 which particle distributions are characterized in the environmental
-compartment of interest. Below are proofs for additional ERM, including
-surface area, volume, mass, and specific surface area.</p>
+compartment of interest.</p>
 </div>
 </div>
 

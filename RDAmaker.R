@@ -1007,17 +1007,17 @@ aoc_quality <- aoc_setup %>%
                               Criteria == "tech.10" ~ "Exposure Homogeneity",
                               Criteria == "tech.11" ~ "Exposure Assessment",
                               Criteria == "tech.12" ~ "Replication",
-                              Criteria == "risk.13" ~ "Endpoints",
+                              Criteria == "risk.13" ~ "Endpoints*",
                               Criteria == "risk.14" ~ "Food Availability",
                               Criteria == "risk.15" ~ "Effect Thresholds",
-                              Criteria == "risk.16" ~ "Dose Response",
+                              Criteria == "risk.16" ~ "Dose Response*",
                               Criteria == "risk.17" ~ "Concentration Range",
                               Criteria == "risk.18" ~ "Aging and Biofouling",
                               Criteria == "risk.19" ~ "Microplastic Diversity",
                               Criteria == "risk.20" ~ "Exposure Time")) %>% 
   #Create factor for criteria and set order - need to be in reverse order here to plot correctly
-  mutate(Criteria_f = factor(Criteria, levels = c("Exposure Time", "Microplastic Diversity", "Aging and Biofouling", "Concentration Range", "Dose Response",
-                                                  "Effect Thresholds", "Food Availability", "Endpoints", "Replication", "Exposure Assessment", "Exposure Homogeneity",
+  mutate(Criteria_f = factor(Criteria, levels = c("Exposure Time", "Microplastic Diversity", "Aging and Biofouling", "Concentration Range", "Dose Response*",
+                                                  "Effect Thresholds", "Food Availability", "Endpoints*", "Replication", "Exposure Assessment", "Exposure Homogeneity",
                                                   "Exposure Verification", "Background Contamination", "Laboratory Preparation","Chemical Purity","Data Reporting*",
                                                   "Source of Microplastics*","Polymer Type*","Particle Shape*","Particle Size*","Exposure Duration*","Control Group*",
                                                   "Sample Size*", "Test Species*", "Administration Route*","Test Medium*")))
@@ -1031,3 +1031,6 @@ saveRDS(aoc_search, file = "aoc_search.RDS")
 saveRDS(aoc_setup, file = "aoc_setup.RDS")
 saveRDS(aoc_v1, file = "aoc_v1.RDS")
 saveRDS(aoc_z, file = "aoc_z.RDS")
+
+library(crayon)
+cat(blue("ToMEx 1 dataset prepared and RDS files saved in main folder!"))

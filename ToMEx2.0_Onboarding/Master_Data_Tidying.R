@@ -8,4 +8,5 @@ source("RDAmaker.R") #get ToMEx1.0 fxn
 source("ToMEx2.0_Onboarding/ToMEx2.0_Data_Tidying.R") 
 ### DONE! ### (seriously, that's all you need to do. The Monte Carlo script is more complicated... don't worry! lol)
 
-
+library(crayon)
+cat(green("ToMEx 1 and 2 datasets prepared and RDS files saved in main folder!"))

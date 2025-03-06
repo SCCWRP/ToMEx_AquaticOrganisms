@@ -1281,20 +1281,23 @@ tomex2.0_aoc_quality_final <- tomex2.0_aoc_quality_final %>%
                               Criteria == "tech.10" ~ "Exposure Homogeneity",
                               Criteria == "tech.11" ~ "Exposure Assessment",
                               Criteria == "tech.12" ~ "Replication",
-                              Criteria == "risk.13" ~ "Endpoints",
+                              Criteria == "risk.13" ~ "Endpoints*",
                               Criteria == "risk.14" ~ "Food Availability",
                               Criteria == "risk.15" ~ "Effect Thresholds",
-                              Criteria == "risk.16" ~ "Dose Response",
+                              Criteria == "risk.16" ~ "Dose Response*",
                               Criteria == "risk.17" ~ "Concentration Range",
                               Criteria == "risk.18" ~ "Aging and Biofouling",
                               Criteria == "risk.19" ~ "Microplastic Diversity",
                               Criteria == "risk.20" ~ "Exposure Time")) %>% 
   #Create factor for criteria and set order - need to be in reverse order here to plot correctly
-  mutate(Criteria_f = factor(Criteria, levels = c("Exposure Time", "Microplastic Diversity", "Aging and Biofouling", "Concentration Range", "Dose Response",
-                                                  "Effect Thresholds", "Food Availability", "Endpoints", "Replication", "Exposure Assessment", "Exposure Homogeneity",
+  mutate(Criteria_f = factor(Criteria, levels = c("Exposure Time", "Microplastic Diversity", "Aging and Biofouling", "Concentration Range", "Dose Response*",
+                                                  "Effect Thresholds", "Food Availability", "Endpoints*", "Replication", "Exposure Assessment", "Exposure Homogeneity",
                                                   "Exposure Verification", "Background Contamination", "Laboratory Preparation","Chemical Purity","Data Reporting*",
                                                   "Source of Microplastics*","Polymer Type*","Particle Shape*","Particle Size*","Exposure Duration*","Control Group*",
                                                   "Sample Size*", "Test Species*", "Administration Route*","Test Medium*")))
 
 #Save RDS file
 saveRDS(tomex2.0_aoc_quality_final, file = "aoc_quality_tomex2.RDS")
+
+library(crayon)
+cat(yellow("ToMEx2 tidyed and saved!"))

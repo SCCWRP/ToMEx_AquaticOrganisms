@@ -561,7 +561,7 @@ tabItem(tabName = "Screening",
             p("Use the cursor to zoom and hover over the plot to view additional information about each study. Some studies are not visible until zoomed in. 
               Alternatively, specific studies may be selected using the filter in the 'Study Screening' tab above."),
             br(),
-            p("'Red Criteria' are indicated by (*). Scores of 0, 1, and 2 are respresented by red, grey, and blue tiles respectively."),
+            p("'Red Criteria' (i.e., minimum criteria for risk assessment per", a(href = "https://microplastics.springeropen.com/articles/10.1186/s43591-022-00033-3", "Mehinto et al., (2022)"), ") are indicated by asterisks (*). Scores of 0 (Inadequate), 1 (Adequate with Restrictions), and 2 (Adequate) are respresented by red, grey, and blue tiles respectively."),
             br(),
             
             plotlyOutput("tech_plotly", height = "800px"), 
@@ -2292,24 +2292,38 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
      # Convert the reordered data to a matrix for Plotly
      tech <- as.matrix(tech)
      
-     #make plotly
-     tech_p <- plot_ly(x=colnames(tech), y=rownames(tech), z = tech,
-                       type = "heatmap",
-                       ygap = .4, xgap = .4,
-                       colors = c("tomato", "ivory3", "dodgerblue"),
-                       hoverinfo = 'text',
-                       showscale = FALSE,
-                       hovertemplate = paste(" Study:  %{x}<br>",
-                                             "Criteria:  %{y}<br>",
-                                             "Score:  %{z}<extra></extra>")) 
+     # Transpose the matrix to swap axes
+     tech_transposed <- t(tech)
      
+     # Make plotly with swapped axes
+     tech_p <- plot_ly(
+       x = colnames(tech_transposed),  # Row names become x-axis
+       y = rownames(tech_transposed), # Column names become y-axis
+       z = tech_transposed,           # Transposed matrix
+       type = "heatmap",
+       ygap = .4, xgap = .4,
+       colors = c("tomato", "ivory3", "dodgerblue"),
+       hoverinfo = 'text',
+       showscale = FALSE,
+       hovertemplate = paste(
+         " Study:  %{y}<br>",          # Note: x and y are swapped in hovertemplate
+         "Criteria:  %{x}<br>",
+         "Score:  %{z}<extra></extra>"
+       )
+     )
+     
+     # Update layout with swapped axes
      tech_p <- tech_p %>% layout(
        title = 'Technical Criteria',
        xaxis = list(
          type = 'category',
          list(fixedrange = TRUE),
-         tickfont = list(size = 10)),
-       yaxis = list(tickfont = list(size = 10)))
+         tickfont = list(size = 14)
+       ),
+       yaxis = list(
+         tickfont = list(size = 10)
+       )
+     )
 
        #print plot
        print(tech_p)
@@ -2355,15 +2369,18 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
      # Convert the reordered data to a matrix for Plotly
      risk <- as.matrix(risk)
      
+     #transpose to swap axes
+     risk_t <- t(risk)
+     
      #make plotly
-     risk_p <- plot_ly(x=colnames(risk), y=rownames(risk), z = risk, 
+     risk_p <- plot_ly(x=colnames(risk_t), y=rownames(risk_t), z = risk_t, 
                        type = "heatmap",
                        ygap = .4, xgap = .4,
                        colors = c("tomato", "ivory3", "dodgerblue"),
                        hoverinfo = 'text',
                        showscale = FALSE,
-                       hovertemplate = paste(" Study:  %{x}<br>",
-                                             "Criteria:  %{y}<br>",
+                       hovertemplate = paste("Study:  %{y}<br>",
+                                             "Criteria:  %{x}<br>",
                                              "Score:  %{z}<extra></extra>")) 
      
      risk_p <- risk_p %>% layout(
@@ -2371,7 +2388,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
        xaxis = list(
          type = 'category',
          list(fixedrange = TRUE),
-         tickfont = list(size = 10)),
+         tickfont = list(size = 14)),
        yaxis = list(tickfont = list(size = 10)))
      
      #print plots
