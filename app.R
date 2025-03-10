@@ -2531,14 +2531,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       # Surface Area ERM #
     ##--- environmental calculations ---###
     #calculate lower ingestible surface area
-    mutate(x_LL_sa = SAfnx(a = 0.5 * x1D_set, #length-limited
-                           b = 0.5 * x1D_set, #length-limited
-                           c = 0.5 * x1D_set)) %>% #length-limited
+    mutate(x_LL_sa = SAfnx(a = x1D_set, #length-limited
+                           b = x1D_set, #length-limited
+                           c = x1D_set)) %>% #length-limited
       #calculate upper ingestible surface area
       mutate(x_UL_sa = SAfnx( 
-        a = 0.5 * x2M, #LENGTH-limited (less conservative assumption)
-        b = 0.5 * x2M, #length-limited
-        c = 0.5 * x2M)) %>%   #length-limited
+        a = x2M, #LENGTH-limited (less conservative assumption)
+        b = x2M, #length-limited
+        c = x2M)) %>%   #length-limited
       #calculate mu_x_poly (env) for surface area
       mutate(mu.sa.poly = mux_polyfnx_generalizable(a.sa, x_UL_sa, x_LL_sa)) %>% 
       
@@ -4587,14 +4587,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       # Surface area ERM #
     ##--- environmental calculations ---###
     #calculate lower ingestible surface area
-    mutate(x_LL_sa = SAfnx(a = 0.5 * x1D_set, #length-limited
-                           b = 0.5 * x1D_set, #length-limited
-                           c = 0.5 * x1D_set)) %>% #length-limited
+    mutate(x_LL_sa = SAfnx(a = x1D_set, #length-limited
+                           b = x1D_set, #length-limited
+                           c = x1D_set)) %>% #length-limited
       #calculate upper ingestible surface area
       mutate(x_UL_sa = SAfnx( 
-        a = 0.5 * x2M, #LENGTH-limited (less conservative assumption)
-        b = 0.5 * x2M, #length-limited
-        c = 0.5 * x2M)) %>%   #length-limited
+        a = x2M, #LENGTH-limited (less conservative assumption)
+        b = x2M, #length-limited
+        c = x2M)) %>%   #length-limited
       #calculate mu_x_poly (env) for surface area
       mutate(mu.sa.poly = mux_polyfnx_generalizable(a.sa, x_UL_sa, x_LL_sa)) %>% 
       
@@ -5783,14 +5783,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     # Surface Area ERM #
     ##--- environmental calculations ---###
     #calculate lower ingestible surface area
-    mutate(x_LL_sa = SAfnx(a = 0.5 * x1D_set, #length-limited
-                           b = 0.5 * x1D_set, #length-limited
-                           c = 0.5 * x1D_set)) %>% #length-limited
+    mutate(x_LL_sa = SAfnx(a = x1D_set, #length-limited
+                           b = x1D_set, #length-limited
+                           c = x1D_set)) %>% #length-limited
       #calculate upper ingestible surface area
       mutate(x_UL_sa = SAfnx( 
-        a = 0.5 * x2M, #LENGTH-limited (less conservative assumption)
-        b = 0.5 * x2M, #length-limited
-        c = 0.5 * x2M)) %>%   #length-limited
+        a = x2M, #LENGTH-limited (less conservative assumption)
+        b = x2M, #length-limited
+        c = x2M)) %>%   #length-limited
       #calculate mu_x_poly (env) for surface area
       mutate(mu.sa.poly = mux_polyfnx_generalizable(a.sa, x_UL_sa, x_LL_sa)) %>% 
       
@@ -7873,14 +7873,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       #### Surface area ERM ####
     ##--- environmental calculations ---###
     #calculate lower ingestible surface area
-    mutate(x_LL_sa = SAfnx(a = 0.5 * x1D_set, #length-limited
-                           b = 0.5 * x1D_set, #length-limited
-                           c = 0.5 * x1D_set)) %>% #length-limited
+    mutate(x_LL_sa = SAfnx(a = x1D_set, #length-limited
+                           b = x1D_set, #length-limited
+                           c = x1D_set)) %>% #length-limited
       #calculate upper ingestible surface area
       mutate(x_UL_sa = SAfnx( 
-        a = 0.5 * x2M, #LENGTH-limited (less conservative assumption)
-        b = 0.5 * x2M, #length-limited
-        c = 0.5 * x2M)) %>%   #length-limited
+        a = x2M, #LENGTH-limited (less conservative assumption)
+        b = x2M, #length-limited
+        c = x2M)) %>%   #length-limited
       #calculate mu_x_poly (env) for surface area
       mutate(mu.sa.poly = mux_polyfnx_generalizable(a.sa, x_UL_sa, x_LL_sa)) %>% 
       
