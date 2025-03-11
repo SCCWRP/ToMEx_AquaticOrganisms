@@ -1,48 +1,52 @@
 ##### FUNCTIONS #####
 
 #### Particle Characteristics Equations ####
-#surface area equation for elongated spheres (fragments)
-SAfnx = function(a, # length
-                 b, # width
-                 c){ # height\
+############### SURFACE AREA ##################
+#surface area equation for elongated spheres
+SAfnx = function(length,
+                 width = NA, 
+                 height = NA,
+                 R = NA,
+                 H_W_ratio = 0.67# assumed 0.67 * width per Kooi et al. (2021)
+) {
+  # If width unknown, use L:W ratio
+  width <- ifelse(is.na(width), R * length, width)
+  
+  # If height unknown, use H:R ratio
+  height <- ifelse(is.na(height), H_W_ratio * width, height)
+  
   # a, b, and c are equivalent to 1/2th of the length, width, and height, respectively
-  a <- 0.5 * a
-  b <- 0.5 * b
-  c <- 0.5 * c
-  SA = 4*pi*(((a*b)^1.6 + (a*c)^1.6 + (b*c)^1.6) / 3)^(1/1.6)
+  a <- 0.5 * length
+  b <- 0.5 * width
+  c <- 0.5 * height
+  
+  SA = (4 * pi) * ((((a*b)^1.6 + (a*c)^1.6 + (b*c)^1.6) / 3) ^ (1/1.6))
   return(SA)}
 
-#cylinder equation for SA. S = 2pi*r*h + 2pi*r^2, where r = width/2 and h = length 
-SAfnx_fiber = function(width, length){
-  radius = width / 2
-  SA = 2*pi*radius*length + 2*pi*radius^2
-  return(SA)
-}
-
-# equation for volume
-volumefnx_poly = function(width, length){
-  height = width #0.67 * width #heigth = width produces an ellipsoid
-  volume = (4/3) * pi * (length/2) * (width/2) * (height/2) 
-  return(volume)}
-
-#Volume equation for elongated sphere (fragments)
-volumefnx = function(R, L){
-  volume = 0.111667 * pi * R^2 * L^3 #assumes height = 0.67 * Width, and Width:Length ratio is 'R' (0.77 average in marine surface water)
-  return(volume)}
-
-#equation for fibers (cylinder) V = pi*r^2*h (where r = particle width/2 and h = particle length). Assume 15 um if width not reported (kooi et al 2021)
-volumefnx_fiber = function(width, length){
-  radius = width/2
-  volume = pi * (radius) ^ 2 * length
+### volume function
+volumefnx <- function(R = NA, # average length-to-width ratio for environment
+                      H_W_ratio = 0.67, # assumed 0.67 * width per Kooi et al. (2021)
+                      length, # particle length (always known)
+                      height = NA, # particle height (if known)
+                      width = NA # particle width (if known)
+) {
+  # If width unknown, use L:W ratio
+  width <- ifelse(is.na(width), R * length, width)
+  
+  # If height unknown, use H:R ratio
+  height <- ifelse(is.na(height), H_W_ratio * width, height)
+  
+  # Calculate volume
+  volume <- (4 / 3) * pi * (length / 2) * (width / 2) * (height / 2)
+  
   return(volume)
 }
 
-massfnx_poly = function(width, length, p){
-  height = width #0.67 * width #heigth = width produces an ellipsoid
-  volume = (4/3) * pi * (length/2) * (width/2) * (height/2)  
+
+################# MASS ####################
+massfnx = function(v, p){
   mass = p * #density (g/cm^3)
-    volume * # volume (um^3): assumes height = 0.67 * Width, and Width:Length ratio is 'R' (compartment-specific)
-    1/1e12 * 1e6 #correction factor
+    v * 1/1e12 * 1e6 #correction factor (g to ug)
   return(mass)}
 
 #### Ecologically Relevant Metric Functions (used in reactives with user-input params) ####
@@ -55,35 +59,18 @@ CFfnx = function(a, #default alpha from Koelmans et al (2020)
   CF = (x2D^(1-a)-x1D^(1-a))/(x2M^(1-a)-x1M^(1-a)) 
   return(CF)}
 
-#### equations for mu_x_poly (note that there are three depending on certain alphas for limits of equation)
-##### if alpha does not equal 2 #####
-# mux.polyfnx = function(a.x,
-#                        x_UL,
-#                        x_LL){
-#   mux.poly = ((1-a.x)/(2-a.x)) * ((x_UL^(2-a.x) - x_LL^(2-a.x))/(x_UL^(1-a.x) - x_LL^(1-a.x)))
-# 
-#   # Log outputs
-#   print("Output from mux_polyfnx:")
-#   print(paste("a.x:", a.x, "x_UL:", x_UL, "x_LL:", x_LL, "mux.poly:", mux.poly))
-# 
-#   return(mux.poly)}
-# 
-# ##### If alpha does equal 2 #####
-# mux.polyfnx.2 = function(x_UL,x_LL){
-#   mux.poly = (log(x_UL/x_LL))/(x_LL^(-1) - x_UL^-1)
-#   return(mux.poly)}
-############# - above functions are deprecated - see generalizable function below ###
+
 
 ### Generalizable function that works on any value (alpha == 1 and == 2 are limits!)
-mux_polyfnx_generalizable <- function(a.x, x_UL, x_LL) {
+mux_polyfnx <- function(a.x, x_UL, x_LL) {
   # Validate inputs
   if (length(a.x) != length(x_UL) || length(a.x) != length(x_LL)) {
     stop("a.x, x_UL, and x_LL must have the same length.")
   }
-
+  
   # Initialize result vector
   mux.poly <- numeric(length(a.x))
-
+  
   # Loop through each element to handle row-by-row logic
   for (i in seq_along(a.x)) {
     if (is.na(a.x[i]) || is.na(x_UL[i]) || is.na(x_LL[i])) {
@@ -116,7 +103,7 @@ mux_polyfnx_generalizable <- function(a.x, x_UL, x_LL) {
       }
     }
   }
-
+  
   # Return the result
   return(mux.poly)
 }
