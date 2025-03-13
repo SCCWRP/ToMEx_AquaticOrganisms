@@ -713,7 +713,7 @@ tabItem(tabName = "Exploration",
                         pickerInput(inputId = "size_check", 
                         label = "Size Category:",
                         choices = levels(aoc_setup$size_f),
-                        selected = levels(aoc_setup$size_f),
+                        selected = c("1µm < 100µm", "100µm < 1mm", "1mm < 5mm"),
                         options = list(`actions-box` = TRUE),
                         multiple = TRUE))),
 
@@ -2427,6 +2427,104 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
    
 #### Exploration S ####
    
+   ###### Alpha Value Radio Buttons ######
+   observeEvent(input$alpha.value.matrix,{
+     
+     if(input$alpha.value.matrix == "Marine Surface Water"){
+       updateNumericInput(inputId = "alpha",
+                          value = 2.07)
+       
+       updateNumericInput(inputId = "a.sa",
+                          value = 1.50)
+       
+       updateNumericInput(inputId = "a.v",
+                          value = 1.48)
+       
+       updateNumericInput(inputId = "a.m",
+                          value = 1.32)
+       
+       updateNumericInput(inputId = "a.ssa",
+                          value = 1.98)
+       
+       updateNumericInput(inputId = "R.ave",
+                          value = 0.77)
+       
+       updateNumericInput(inputId = "p.ave",
+                          value = 1.10)
+       
+     }
+     
+     if(input$alpha.value.matrix == "Freshwater Surface Water"){
+       updateNumericInput(inputId = "alpha",
+                          value = 2.64)
+       
+       updateNumericInput(inputId = "a.sa",
+                          value = 2.00)
+       
+       updateNumericInput(inputId = "a.v",
+                          value = 1.68)
+       
+       updateNumericInput(inputId = "a.m",
+                          value = 1.65)
+       
+       updateNumericInput(inputId = "a.ssa",
+                          value = 2.71)
+       
+       updateNumericInput(inputId = "R.ave",
+                          value = 0.67)
+       
+       updateNumericInput(inputId = "p.ave",
+                          value = 1.04)
+     }
+     
+     if(input$alpha.value.matrix == "Marine Sediment"){
+       updateNumericInput(inputId = "alpha",
+                          value = 2.57)
+       
+       updateNumericInput(inputId = "a.sa",
+                          value = 1.75)
+       
+       updateNumericInput(inputId = "a.v",
+                          value = 1.50)
+       
+       updateNumericInput(inputId = "a.m",
+                          value = 1.50)
+       
+       updateNumericInput(inputId = "a.ssa",
+                          value = 2.54)
+       
+       updateNumericInput(inputId = "R.ave",
+                          value = 0.75)
+       
+       updateNumericInput(inputId = "p.ave",
+                          value = 1.16)
+     }
+     
+     if(input$alpha.value.matrix == "Freshwater Sediment"){
+       updateNumericInput(inputId = "alpha",
+                          value = 3.25)
+       
+       updateNumericInput(inputId = "a.sa",
+                          value = 1.89)
+       
+       updateNumericInput(inputId = "a.v",
+                          value = 1.53)
+       
+       updateNumericInput(inputId = "a.m",
+                          value = 1.56)
+       
+       updateNumericInput(inputId = "a.ssa",
+                          value = 2.82)
+       
+       updateNumericInput(inputId = "R.ave",
+                          value = 0.70)
+       
+       updateNumericInput(inputId = "p.ave",
+                          value = 1.15)
+     }
+     
+   })
+   
   # Create new dataset based on widget filtering and adjusted to reflect the presence of the "update" button.
   aoc_filter <- eventReactive(list(input$go),{
     # eventReactive explicitly delays activity until you press the button
@@ -2472,6 +2570,8 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     #define additional parameters for calculations based on averages in the environment
     R.ave <- input$R.ave #0.77 #average width to length ratio for microplastics in marine enviornment
     p.ave <- input$p.ave #1.10 #average density in marine surface water
+    
+    print("Performing alignments on exploration dataset..")
     
     # calculate ERM for each species
     aoc_setup <- aoc_setup %>% 
@@ -2673,104 +2773,8 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       # specific surface area to specific surface area #
       mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
     
-    ###### Alpha Value Radio Buttons ######
-    observeEvent(input$alpha.value.matrix,{
-      
-      if(input$alpha.value.matrix == "Marine Surface Water"){
-        updateNumericInput(inputId = "alpha",
-                           value = 2.07)
-        
-        updateNumericInput(inputId = "a.sa",
-                           value = 1.50)
-        
-        updateNumericInput(inputId = "a.v",
-                           value = 1.48)
-        
-        updateNumericInput(inputId = "a.m",
-                           value = 1.32)
-        
-        updateNumericInput(inputId = "a.ssa",
-                           value = 1.98)
-        
-        updateNumericInput(inputId = "R.ave",
-                           value = 0.77)
-        
-        updateNumericInput(inputId = "p.ave",
-                           value = 1.10)
-        
-      }
-      
-      if(input$alpha.value.matrix == "Freshwater Surface Water"){
-        updateNumericInput(inputId = "alpha",
-                           value = 2.64)
-        
-        updateNumericInput(inputId = "a.sa",
-                           value = 2.00)
-        
-        updateNumericInput(inputId = "a.v",
-                           value = 1.68)
-        
-        updateNumericInput(inputId = "a.m",
-                           value = 1.65)
-        
-        updateNumericInput(inputId = "a.ssa",
-                           value = 2.71)
-        
-        updateNumericInput(inputId = "R.ave",
-                           value = 0.67)
-        
-        updateNumericInput(inputId = "p.ave",
-                           value = 1.04)
-      }
-      
-      if(input$alpha.value.matrix == "Marine Sediment"){
-        updateNumericInput(inputId = "alpha",
-                           value = 2.57)
-        
-        updateNumericInput(inputId = "a.sa",
-                           value = 1.75)
-        
-        updateNumericInput(inputId = "a.v",
-                           value = 1.50)
-        
-        updateNumericInput(inputId = "a.m",
-                           value = 1.50)
-        
-        updateNumericInput(inputId = "a.ssa",
-                           value = 2.54)
-        
-        updateNumericInput(inputId = "R.ave",
-                           value = 0.75)
-        
-        updateNumericInput(inputId = "p.ave",
-                           value = 1.16)
-      }
-      
-      if(input$alpha.value.matrix == "Freshwater Sediment"){
-        updateNumericInput(inputId = "alpha",
-                           value = 3.25)
-        
-        updateNumericInput(inputId = "a.sa",
-                           value = 1.89)
-        
-        updateNumericInput(inputId = "a.v",
-                           value = 1.53)
-        
-        updateNumericInput(inputId = "a.m",
-                           value = 1.56)
-        
-        updateNumericInput(inputId = "a.ssa",
-                           value = 2.82)
-        
-        updateNumericInput(inputId = "R.ave",
-                           value = 0.70)
-        
-        updateNumericInput(inputId = "p.ave",
-                           value = 1.15)
-      }
-      
-    })
-
+    print("Alignments on exploration dataset complete!")
+    
     ###### Water Radio Button Alignments ######
     # Unaligned #
     #Mass - Unaligned
@@ -3686,7 +3690,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         mutate(dose_new = EC_env_ssa.um2.ug.mL)}
     
     # new dataset based on filtering
-    aoc_setup %>% # take original dataset
+    aoc_exploration <- aoc_setup %>% # take original dataset
     filter(exp_type_f %in% exp_type_c) %>%   #filter by experiment type
     filter(org_f %in% org_c) %>%  # filter by organism inputs
     filter(lvl1_f %in% lvl1_c) %>%  # filter by level inputs
@@ -3703,9 +3707,16 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     filter(tier_zero_tech_f %in% tech_tier_zero_c) %>%  #technical quality
     filter(tier_zero_risk_f %in% risk_tier_zero_c)  %>%  #risk assessment quality
     filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, upper.tissue.trans.size.um), #if tissue-trans limited, don't use data with non-translocatable particles
-                      ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set)))  #if ingestion-limited, don't use data outside upper default size range
+                      ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set))) %>%  #if ingestion-limited, don't use data outside upper default size range
+    # remove invalid data
+    filter(dose_new > 0) %>% 
+    drop_na(dose_new)
       #filter(size.length.um.used.for.conversions <= range_n) #For size slider widget - currently commented out
   
+    print("Exploration dataset filtered and aligned!")
+    print(head(aoc_exploration %>% sample_n(6) %>% select(rowid, org_f, effect_f, dose_new)))
+    
+    aoc_exploration
   })
 
 #caption ouput       
@@ -3755,17 +3766,19 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                          "Nature" = scale_color_npg(),
                          "JAMA" = scale_color_jama())
     
-    
+    # translate reactive
+    aoc_filter <- aoc_filter() 
     
     #Mini data set for measurement and study labels
-    aoc_org1 <- aoc_filter() %>%
-      drop_na(dose_new) %>%
+    aoc_org1 <- aoc_filter %>%
       group_by(org_f, effect_f) %>% # need to include so there's a recognized "y"
       summarize(dose_new = quantile(dose_new, .1), # need for recognized "x"
                 measurements = n(),
                 studies = n_distinct(article))
+    
+    print(head(aoc_org1))
    
-    p <- ggplot(na.omit(aoc_filter()[, c("dose_new", "org_f", "effect_f")]), aes(x = dose_new, y = org_f, fill = effect_f)) +
+    p <- ggplot(na.omit(aoc_filter[, c("dose_new", "org_f", "effect_f")]), aes(x = dose_new, y = org_f, fill = effect_f)) +
       plot.type + 
       coord_trans(x = "log10") +
       scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 10),
