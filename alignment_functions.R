@@ -108,10 +108,11 @@ SAfnx = function(length,
   return(SA)}
 
 ################# MASS ####################
-massfnx = function(v, p){
-  mass = p * #density (g/cm^3)
-    v * 1/1e12 * 1e6 #correction factor (g to ug)
-  return(mass)}
+massfnx <- function(v, p) {
+  # If either v or p is NA, return NA for those elements
+  mass <- ifelse(is.na(v) | is.na(p), NA, p * v * (1 / 1e12) * 1e6) # correction factor (g to µg)
+  return(mass)
+}
 
 ###### SSA #####
 SSA.inversefnx = function(sa, # average surface area
@@ -168,6 +169,26 @@ preparation_fxn <- function(df, #dataframe input
     }
   
   df_prepared <- df %>% 
+    mutate(beta_log10_body_length = !!beta_log10_body_length,
+           body_length_intercept = !!body_length_intercept,
+           H_W_ratio = !!H_W_ratio,
+           R.ave.water.marine = !!R.ave.water.marine,                                 
+           R.ave.water.freshwater = !!R.ave.water.freshwater, 
+           R.ave.sediment.marine = !!R.ave.sediment.marine,
+           R.ave.sediment.freshwater = !!R.ave.sediment.freshwater, 
+           p.ave.marine = !!p.ave.marine,
+           alpha.marine = !!alpha.marine,
+           a.sa.marine = !!a.sa.marine, 
+           a.v.marine = !!a.v.marine, 
+           a.m.marine = !!a.m.marine, 
+           a.ssa.marine = !!a.ssa.marine, 
+           p.ave.freshwater = !!p.ave.freshwater, 
+           alpha.freshwater = !!alpha.freshwater,
+           a.sa.freshwater = !!a.sa.freshwater, 
+           a.v.freshwater = !!a.v.freshwater, 
+           a.m.freshwater = !!a.m.freshwater,                     
+           a.ssa.freshwater = !!a.ssa.freshwater) %>% 
+    
     ##### define environment-specific alpha parameters ############### 
     mutate(alpha = case_when(environment == "Marine"  & exposure.route == "water" ~ alpha.marine,
                              environment == "Freshwater" & exposure.route == "water" ~ alpha.freshwater),
@@ -180,23 +201,12 @@ preparation_fxn <- function(df, #dataframe input
            a.ssa = case_when(environment == "Marine" & exposure.route == "water" ~ a.ssa.marine,
                              environment == "Freshwater" & exposure.route == "water" ~ a.ssa.freshwater),
            R.ave = case_when(environment == "Marine" & exposure.route == "water" ~ R.ave.water.marine,
-                             environment == "Freshwater" & exposure.route == "water" ~ R.ave.water.freshwater),
-           p.ave = case_when(environment == "Marine" & exposure.route == "water" ~ p.ave.marine,
-                             environment == "Freshwater" & exposure.route == "water" ~ p.ave.freshwater),
-           ### sediment
-           alpha = case_when(environment == "Marine"  & exposure.route == "sediment" ~ alpha.marine,
-                             environment == "Freshwater" & exposure.route == "sediment" ~ alpha.freshwater),
-           a.sa = case_when(environment == "Marine" & exposure.route == "sediment" ~ a.sa.marine,
-                            environment == "Freshwater" & exposure.route == "sediment" ~ a.sa.freshwater),
-           a.v = case_when(environment == "Marine" & exposure.route == "sediment" ~ a.v.marine,
-                           environment == "Freshwater" & exposure.route == "sediment" ~ a.v.freshwater),
-           a.m = case_when(environment == "Marine" & exposure.route == "sediment" ~ a.m.marine,
-                           environment == "Freshwater" & exposure.route == "sediment" ~ a.m.freshwater),
-           a.ssa = case_when(environment == "Marine" & exposure.route == "sediment" ~ a.ssa.marine,
-                             environment == "Freshwater" & exposure.route == "sediment" ~ a.ssa.freshwater),
-           R.ave = case_when(environment == "Marine" & exposure.route == "sediment" ~ R.ave.sediment.marine,
+                             environment == "Freshwater" & exposure.route == "water" ~ R.ave.water.freshwater,
+                             environment == "Marine" & exposure.route == "sediment" ~ R.ave.sediment.marine,
                              environment == "Freshwater" & exposure.route == "sediment" ~ R.ave.sediment.freshwater),
-           p.ave = case_when(environment == "Marine" & exposure.route == "sediment" ~ p.ave.marine,
+           p.ave = case_when(environment == "Marine" & exposure.route == "water" ~ p.ave.marine,
+                             environment == "Freshwater" & exposure.route == "water" ~ p.ave.freshwater,
+                             environment == "Marine" & exposure.route == "sediment" ~ p.ave.marine,
                              environment == "Freshwater" & exposure.route == "sediment" ~ p.ave.freshwater),
            H_W_ratio = H_W_ratio # currently just using one value for all environments
     ) %>% 
@@ -239,11 +249,11 @@ preparation_fxn <- function(df, #dataframe input
       shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
     )) %>% 
     #### use assessment factors to get chronic NOECs ##
-    mutate(dose.particles.mL.AF.corrected = dose.particles.mL.master / (af.time * af.noec)) %>%
+   # mutate(dose.particles.mL.AF.corrected = dose.particles.mL.master / (af.time * af.noec)) %>%
     # if NA, then there's missing AFs - data are considered invalid #
-    drop_na(dose.particles.mL.AF.corrected) %>%
+   # drop_na(dose.particles.mL.AF.corrected) %>%
     # rename
-    mutate(dose.particles.mL.master = dose.particles.mL.AF.corrected) %>% 
+  #  mutate(dose.particles.mL.master = dose.particles.mL.AF.corrected) %>% 
     # calculate volume for monodisperse particles #
     mutate(particle.volume.um3 = volumefnx(R = R.ave,
                                            length = size.length.um.used.for.conversions, 
@@ -279,6 +289,7 @@ preparation_fxn <- function(df, #dataframe input
     #calculate minimum and maximum mass for polydisperse particles
     mutate(mass.per.particle.mg.min = massfnx(v = particle.volume.um3.min, p = density.g.cm3) * 1e-3) %>% #equation uses g/cm3
     mutate(mass.per.particle.mg.max = massfnx(v = particle.volume.um3.max, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+    mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
     ########## DOSE METRICS ################
 
     #calcualte dose metrics accordingly
@@ -325,10 +336,13 @@ alignment_fxn <- function(df_prepared, #dataframe input
                             x1D_set = 1, # lower default distribution (typically 1 um)
                             x2D_set = 5000, # upper default distribution (typically 5000 um)
                             x1M_set = 1, # lower bioavailable size limit (typically 1 um)
+                          
                             upper.tissue.trans.size.um = 88, # Coffin et al. (2025)
-                            beta_log10_body_length =  0.9341, # Jâms, et al 2020 Nature paper
+                            beta_log10_body_length =  0.9341, # Jâms, et al 2020 Nature paper 
                             body_length_intercept = 1.1200, # Jâms, et al 2020 Nature paper
+                          
                             H_W_ratio = 0.67, # H:W ratio across all environments/particle types
+                          
                             R.ave.water.marine = 0.77, # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
                             R.ave.water.freshwater = 0.67, # average length to width ratio of microplastics in freshwater environment (Kooi et al. 2021)
                             R.ave.sediment.marine = 0.75, # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
@@ -356,35 +370,50 @@ alignment_fxn <- function(df_prepared, #dataframe input
   }
   
   # Check if columns exist and conditionally create them
-  if (!"dose.mg.kg.sed.measured" %in% names(df)) {
-    df <- df %>%
+  if (!"dose.mg.kg.sed.measured" %in% names(df_prepared)) {
+    df_prepared <- df_prepared %>%
       mutate(dose.mg.kg.sed.measured = measured.dose.mg.kg.sediment)
   }
   
-  if (!"dose.mg.kg.sed.nominal" %in% names(df)) {
-    df <- df %>%
+  if (!"dose.mg.kg.sed.nominal" %in% names(df_prepared)) {
+    df_prepared <- df_prepared %>%
       mutate(dose.mg.kg.sed.nominal = nominal.dose.mg.kg.sediment)
   }
   
-  if (!"dose.particles.kg.sed.nominal" %in% names(df)) {
-    df <- df %>%
+  if (!"dose.particles.kg.sed.nominal" %in% names(df_prepared)) {
+    df_prepared <- df_prepared %>%
       mutate(dose.particles.kg.sed.nominal = nominal.dose.particles.kg.sediment)
   }
   
   if (!"environment" %in% names(df)){
-    df <- df %>% 
+    df_prepared <- df_prepared %>% 
       mutate(environment = env_f)
   }
   
   df_aligned <- df_prepared %>% 
-    mutate(x1D_set = x1D_set,
-           x2D_set = x2D_set,
-           x1M_set = x1M_set,
-           upper.tissue.trans.size.um = upper.tissue.trans.size.um,
-           beta_log10_body_length = beta_log10_body_length,
-           body_length_intercept = body_length_intercept,
-           H_W_ratio = H_W_ratio) %>% 
-    
+    mutate(x1D_set = !!x1D_set,
+           x2D_set = !!x2D_set,
+           x1M_set = !!x1M_set,
+           upper.tissue.trans.size.um = !!upper.tissue.trans.size.um,
+           beta_log10_body_length = !!beta_log10_body_length,
+           body_length_intercept = !!body_length_intercept,
+           H_W_ratio = !!H_W_ratio,
+           R.ave.water.marine = !!R.ave.water.marine,                                 
+           R.ave.water.freshwater = !!R.ave.water.freshwater, 
+           R.ave.sediment.marine = !!R.ave.sediment.marine,
+           R.ave.sediment.freshwater = !!R.ave.sediment.freshwater, 
+           p.ave.marine = !!p.ave.marine,
+           alpha.marine = !!alpha.marine,
+           a.sa.marine = !!a.sa.marine, 
+           a.v.marine = !!a.v.marine, 
+           a.m.marine = !!a.m.marine, 
+           a.ssa.marine = !!a.ssa.marine, 
+           p.ave.freshwater = !!p.ave.freshwater, 
+           alpha.freshwater = !!alpha.freshwater,
+           a.sa.freshwater = !!a.sa.freshwater, 
+           a.v.freshwater = !!a.v.freshwater, 
+           a.m.freshwater = !!a.m.freshwater,                     
+           a.ssa.freshwater = !!a.ssa.freshwater) %>% 
     ## assign alpha values
     mutate(environment = env_f) %>% 
     mutate(alpha = case_when(environment == "Marine"  & exposure.route == "water" ~ alpha.marine,
@@ -398,23 +427,12 @@ alignment_fxn <- function(df_prepared, #dataframe input
            a.ssa = case_when(environment == "Marine" & exposure.route == "water" ~ a.ssa.marine,
                              environment == "Freshwater" & exposure.route == "water" ~ a.ssa.freshwater),
            R.ave = case_when(environment == "Marine" & exposure.route == "water" ~ R.ave.water.marine,
-                             environment == "Freshwater" & exposure.route == "water" ~ R.ave.water.freshwater),
-           p.ave = case_when(environment == "Marine" & exposure.route == "water" ~ p.ave.marine,
-                             environment == "Freshwater" & exposure.route == "water" ~ p.ave.freshwater),
-           ### sediment
-           alpha = case_when(environment == "Marine"  & exposure.route == "sediment" ~ alpha.marine,
-                             environment == "Freshwater" & exposure.route == "sediment" ~ alpha.freshwater),
-           a.sa = case_when(environment == "Marine" & exposure.route == "sediment" ~ a.sa.marine,
-                            environment == "Freshwater" & exposure.route == "sediment" ~ a.sa.freshwater),
-           a.v = case_when(environment == "Marine" & exposure.route == "sediment" ~ a.v.marine,
-                           environment == "Freshwater" & exposure.route == "sediment" ~ a.v.freshwater),
-           a.m = case_when(environment == "Marine" & exposure.route == "sediment" ~ a.m.marine,
-                           environment == "Freshwater" & exposure.route == "sediment" ~ a.m.freshwater),
-           a.ssa = case_when(environment == "Marine" & exposure.route == "sediment" ~ a.ssa.marine,
-                             environment == "Freshwater" & exposure.route == "sediment" ~ a.ssa.freshwater),
-           R.ave = case_when(environment == "Marine" & exposure.route == "sediment" ~ R.ave.sediment.marine,
+                             environment == "Freshwater" & exposure.route == "water" ~ R.ave.water.freshwater,
+                             environment == "Marine" & exposure.route == "sediment" ~ R.ave.sediment.marine,
                              environment == "Freshwater" & exposure.route == "sediment" ~ R.ave.sediment.freshwater),
-           p.ave = case_when(environment == "Marine" & exposure.route == "sediment" ~ p.ave.marine,
+           p.ave = case_when(environment == "Marine" & exposure.route == "water" ~ p.ave.marine,
+                             environment == "Freshwater" & exposure.route == "water" ~ p.ave.freshwater,
+                             environment == "Marine" & exposure.route == "sediment" ~ p.ave.marine,
                              environment == "Freshwater" & exposure.route == "sediment" ~ p.ave.freshwater),
            H_W_ratio = H_W_ratio # currently just using one value for all environments
     ) %>% 
@@ -542,15 +560,15 @@ alignment_fxn <- function(df_prepared, #dataframe input
     ##### Determine CF_bio for ERM of interest ###
     # calculate CF_bio for translocation
     mutate(CF_bio_trans = CFfnx(x1M = x1M_set,#lower size bin
-                         x2M = x2M_trans, #upper translocatable
-                         x1D = x1D_set, #default
-                         x2D = x2D_set,  #default
-                         a = alpha),
-    CF_bio_ingest = CFfnx(x1M = x1M_set,#lower size bin
-                          x2M = x2M_ingest, #upper ingestible length
-                          x1D = x1D_set, #default
-                          x2D = x2D_set,  #default upper size range
-                          a = alpha)) %>% 
+                                x2M = x2M_trans, #upper translocatable
+                                x1D = x1D_set, #default
+                                x2D = x2D_set,  #default
+                                a = alpha),
+           CF_bio_ingest = CFfnx(x1M = x1M_set,#lower size bin
+                                 x2M = x2M_ingest, #upper ingestible length
+                                 x1D = x1D_set, #default
+                                 x2D = x2D_set,  #default upper size range
+                                 a = alpha)) %>% 
     
     ################################################
   ############## Particle ERM #####################
@@ -570,12 +588,7 @@ alignment_fxn <- function(df_prepared, #dataframe input
     # polydisperse effect threshold for particles
     mutate(EC_poly_p.particles.mL_ingest = (EC_mono_p.particles.mL_ingest * mu.p.mono)/mu.p.poly_ingest) %>% 
     ## Calculate environmentally relevant effect threshold for particles
-    mutate(EC_env_p.particles.mL_ingest = EC_poly_p.particles.mL_ingest * CF_bio_ingest,
-           # final ingestion-based ERM excludes algae
-           EC_env_p.particles.mL_ingest =  case_when(
-             Group == "Algae" ~ NA,
-             T ~ EC_env_p.particles.mL_ingest)
-           ) %>%  #aligned particle effect concentration (1-5000 um)
+    mutate(EC_env_p.particles.mL_ingest = EC_poly_p.particles.mL_ingest * CF_bio_ingest) %>%  #aligned particle effect concentration (1-5000 um)
     
   ################################################
 ################### FOOD DILUTION ERM ##########
@@ -612,11 +625,13 @@ alignment_fxn <- function(df_prepared, #dataframe input
     # translate to environmental
     mutate(mu.v.poly_ingest = mux_polyfnx(a.v, x_UL_v_ingest, x_LL_v_ingest),
            EC_poly_v.particles.mL_ingest = (EC_mono_p.particles.mL_ingest * mu.v.mono)/mu.v.poly_ingest,
-           EC_env_v.particles.mL_ingest = EC_poly_v.particles.mL_ingest * CF_bio_ingest,
+           EC_env_v.particles.mL_ingest = EC_poly_v.particles.mL_ingest * CF_bio_ingest#,
            # final ingestion-based ERM excludes algae
-           EC_env_v.particles.mL_ingest =  case_when(
-             Group == "Algae" ~ NA,
-             T ~ EC_env_v.particles.mL_ingest)) %>% 
+        #   EC_env_v.particles.mL_ingest =  case_when(
+         #    Group == "Algae" ~ NA,
+  #           T ~ EC_env_v.particles.mL_ingest)
+  ) %>% 
+    mutate(particles.mL.food.dilution = EC_env_v.particles.mL_ingest) %>% 
     
     #### TRANSLOCATION_LIMITED###
     mutate(x_LL_v_trans = volumefnx(length = x1D_set,
@@ -684,11 +699,7 @@ mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conver
     mutate(mu.sa.poly_ingest = mux_polyfnx(a.sa, x_UL_sa_ingest, x_LL_sa_ingest),
            EC_poly_sa.particles.mL_ingest = (EC_mono_p.particles.mL_ingest  * mu.sa.mono)/mu.sa.poly_ingest,
            # calculate EC_env_sa (ingestion limited). This is the Tissue ingestlocation ERM Value!
-           EC_env_sa.particles.mL_ingest = EC_poly_sa.particles.mL_ingest * CF_bio_ingest,
-           # final ingestion-based ERM excludes algae
-           EC_env_sa.particles.mL_ingest =  case_when(
-             Group == "Algae" ~ NA,
-             T ~ EC_env_sa.particles.mL_ingest)) %>% 
+           EC_env_sa.particles.mL_ingest = EC_poly_sa.particles.mL_ingest * CF_bio_ingest) %>% 
     
     
     #################################################
@@ -717,11 +728,7 @@ mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conver
            EC_poly_m.particles.mL_trans = (EC_mono_p.particles.mL_trans * mu.m.mono)/mu.m.poly_trans) %>%
     #calculate environmentally realistic effect threshold
     mutate(EC_env_m.particles.mL_trans = EC_poly_m.particles.mL_trans * CF_bio_trans,
-           EC_env_m.particles.mL_ingest = EC_poly_m.particles.mL_ingest * CF_bio_ingest,
-           # final ingestion-based ERM excludes algae
-           EC_env_m.particles.mL_ingest =  case_when(
-             Group == "Algae" ~ NA,
-             T ~ EC_env_m.particles.mL_ingest)) %>% 
+           EC_env_m.particles.mL_ingest = EC_poly_m.particles.mL_ingest * CF_bio_ingest) %>% 
   
     #################################################
     ############# SPECIFIC SURFACE AREA ERM #########
@@ -758,11 +765,7 @@ mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conver
     mutate(mu.ssa.poly_ingest = 1 / mu.ssa.inverse.poly_ingest) %>%  #calculate mu_SSA from inverse
     mutate(EC_poly_ssa.particles.mL_ingest = (EC_mono_p.particles.mL_ingest * mu.ssa.mono)/mu.ssa.poly_ingest) %>% 
     #calculate environmentally realistic effect threshold
-    mutate(EC_env_ssa.particles.mL_ingest = EC_poly_ssa.particles.mL_ingest * CF_bio_ingest,
-           # final ingestion-based ERM excludes algae
-           EC_env_ssa.particles.mL_ingest =  case_when(
-             Group == "Algae" ~ NA,
-             T ~ EC_env_ssa.particles.mL_ingest)) %>% 
+    mutate(EC_env_ssa.particles.mL_ingest = EC_poly_ssa.particles.mL_ingest * CF_bio_ingest) %>% 
     
     ##################################################
     ### Convert to Metrics other than particles/mL ###
@@ -889,6 +892,7 @@ mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conver
   return(df_aligned)
 }
 
+cat("Alignment function and dependencies loaded!")
 
 #### EXAMPLE APPLICATION ####
 # aoc_z <- readRDS("data/input/aoc_z_tomex2.RDS")

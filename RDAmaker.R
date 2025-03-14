@@ -4,30 +4,15 @@
 library(tidyverse) #General everything
 
 source("functions.R") # necessary for surface area, volume calculations
-source("alignment_functions.R") #includes preparation fxn which is used here. Ported from EcoTox repo.
+
+R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
+R.ave.water.freshwater <- 0.67
+R.ave.sediment.marine <- 0.75
+R.ave.sediment.freshwater <- 0.70
 
 
-RDA_maker_function <- function(aoc = read_csv("AquaticOrganisms_Clean_final.csv", guess_max = 10000) %>% rowid_to_column(),
-                               beta_log10_body_length =  0.9341, # Jâms, et al 2020 Nature paper
-                               body_length_intercept = 1.1200, # Jâms, et al 2020 Nature paper
-                               H_W_ratio = 0.67, # H:W ratio across all environments/particle types
-                               R.ave.water.marine = 0.77, # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
-                               R.ave.water.freshwater = 0.67, # average length to width ratio of microplastics in freshwater environment (Kooi et al. 2021)
-                               R.ave.sediment.marine = 0.75, # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
-                               R.ave.sediment.freshwater = 0.70, # average length to width ratio of microplastics in freshwater environment (Kooi et al. 2021)
-                               p.ave.marine = 1.10, #average density in marine surface water
-                               alpha.marine = 2.07, #table s4 for marine surface water. length
-                               a.sa.marine = 1.50, #marine surface area power law
-                               a.v.marine = 1.48, #a_V for marine surface water volume
-                               a.m.marine = 1.32, # upper limit fora_m for mass for marine surface water in table S4 
-                               a.ssa.marine = 1.98, # A_SSA for marine surface water
-                               p.ave.freshwater = 1.04, #average density in freshwater surface water
-                               alpha.freshwater = 2.64, #table s4 for freshwater surface water. length
-                               a.sa.freshwater = 2.00, #freshwater surface area power law
-                               a.v.freshwater = 1.68, #a_V for freshwater surface water volume
-                               a.m.freshwater = 1.65, # upper limit fora_m for mass for freshwater surface water in table S4 
-                               a.ssa.freshwater = 2.71) {
-
+##### Read in Data ####
+aoc <- read_csv("AquaticOrganisms_Clean_final.csv", guess_max = 10000) %>% rowid_to_column()
 
 # Master dataset for scatterplots - for Heili's tab.
 aoc_v1 <- aoc %>% # start with original dataset
@@ -707,25 +692,133 @@ aoc_setup <- aoc_v1 %>% # start with original dataset
     is.na(max.size.ingest.mm) ~ "estimated",  # If the value is NA, label it "estimated"
     TRUE ~ "reported"                   # Otherwise, label it "converted"
   )) %>% 
-  # #calculate maximum ingestible size (if not already in database)
-  # mutate(max.size.ingest.mm = ifelse(is.na(max.size.ingest.mm), 
-  #                                    10^(0.9341 * log10(body.length.cm * 10) - 1.1200),  #(Jamm et al 2020 Nature paper)correction for cm to mm
-  #                                    max.size.ingest.mm)) %>%  # if already present, just use that
-  # mutate(max.size.ingest.um = 1000 * max.size.ingest.mm) %>%  #makes it less confusing below
+  #calculate maximum ingestible size (if not already in database)
+  mutate(max.size.ingest.mm = ifelse(is.na(max.size.ingest.mm), 
+                                     10^(0.9341 * log10(body.length.cm * 10) - 1.1200),  #(Jamm et al 2020 Nature paper)correction for cm to mm
+                                     max.size.ingest.mm)) %>%  # if already present, just use that
+  mutate(max.size.ingest.um = 1000 * max.size.ingest.mm) %>%  #makes it less confusing below
   #Make factor for experiment type
   mutate(exp_type_f = factor(case_when(leachate.only == "Y" ~ "Leachate",
                                        chem.exp.typ.nominal == "Particle Only" ~ "Particle Only",
                                        chem.exp.typ.nominal == "co.exp" ~ "Chemical Co-Exposure",
                                        chem.exp.typ.nominal == "sorbed" ~ "Chemical Transfer"))) %>%
+  
+  #### Recalculation of surface area and volume based on shape ####
+mutate(R.ave = case_when(environment == "Marine" & exposure.route == "water" ~ R.ave.water.marine,
+                         environment == "Marine" & exposure.route == "sediment" ~ R.ave.sediment.marine,
+                         environment == "Freshwater" & exposure.route == "water" ~ R.ave.water.freshwater,
+                         environment == "Freshwater" & exposure.route == "sediment" ~ R.ave.sediment.freshwater)) %>% 
+ 
+  
   # create label for polydispersity
   mutate(polydispersity = case_when(
     is.na(size.length.min.mm.nominal|size.length.min.mm.measured) ~ "monodisperse",
     !is.na(size.length.min.mm.nominal|size.length.min.mm.measured) ~ "polydisperse")) %>% 
+  
   ####prioritize measured parameters for conversions ###
   # minima
+  mutate(H_W_ratio = 0.67) %>%  #Kooi et al. (2021)
   mutate(size.length.min.um.used.for.conversions = case_when(
     is.na(size.length.min.mm.measured) ~ size.length.min.mm.nominal * 1000,
     !is.na(size.length.min.mm.measured) ~ size.length.min.mm.measured * 1000)) %>% 
+  mutate(size.width.min.um.used.for.conversions = case_when(
+    shape == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
+    shape == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
+    shape == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+    shape == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+  mutate(size.height.min.um.used.for.conversions = case_when(
+    shape == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
+    shape == "Not Reported" ~ R.ave * 0.67 * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+    shape == "fiber" ~  R.ave * size.length.min.um.used.for.conversions, #height same as width for fibers
+    shape == "fragment" ~ R.ave * 0.67 * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment AND average height to width ratio (kooi et al 2021)
+  # maxima
+  mutate(size.length.max.um.used.for.conversions = case_when(
+    is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
+    !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000)) %>% 
+  mutate(size.width.max.um.used.for.conversions = case_when(
+    shape == "sphere" ~ size.length.max.um.used.for.conversions, #all dims same
+    shape == "fiber" ~ R.ave * size.length.max.um.used.for.conversions, #median holds for all particles (Kooi et al 2021) #there are no fibers
+    shape == "Not Reported" ~ R.ave * size.length.max.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+    shape == "fragment" ~ R.ave * size.length.max.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+  #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+  mutate(size.height.um.used.for.conversions = case_when(
+    shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+    shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+  )) %>% 
+  mutate(size.height.max.um.used.for.conversions = case_when(
+    shape == "sphere" ~ size.length.max.um.used.for.conversions, #all dims same
+    shape == "Not Reported" ~ R.ave * 0.67 * size.length.max.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+    shape == "fiber" ~ R.ave * size.length.max.um.used.for.conversions, #hieght same as width
+    shape == "fragment" ~ R.ave * 0.67 * size.length.max.um.used.for.conversions)) %>%  # average width to length ratio in the marine environment AND average height to width ratio (kooi et al 2021)
+  # calculate surface are for monodisperse particles
+  mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
+                                           width = size.width.um.used.for.conversions,
+                                           height = size.height.um.used.for.conversions,
+                                           R = R.ave,
+                                           H_W_ratio = H_W_ratio)) %>% 
+  # calculate min/max SA for polydisperse mixtures (being sure to use translocation-restricted polydisperse upper sizes)
+  mutate(particle.surface.area.um2.min = SAfnx(length = size.length.min.um.used.for.conversions,
+                                               width = size.width.min.um.used.for.conversions,
+                                               height = size.height.min.um.used.for.conversions,
+                                               R = R.ave,
+                                               H_W_ratio = H_W_ratio),
+         particle.surface.area.um2.max = SAfnx(length = size.length.max.um.used.for.conversions,
+                                               width = size.width.max.um.used.for.conversions,
+                                               height = size.height.max.um.used.for.conversions,
+                                               R = R.ave,
+                                               H_W_ratio = H_W_ratio)) %>% 
+  # calculate volume for monodisperse particles #
+  mutate(particle.volume.um3 = volumefnx(R = R.ave,
+                                         length = size.length.um.used.for.conversions, 
+                                         width = size.width.um.used.for.conversions,
+                                         height = size.height.um.used.for.conversions
+  )) %>% 
+  # calculate min and max volume when polydisperse particles are used (being sure to use ingestion-restricted sizes)
+  mutate(particle.volume.um3.min = volumefnx(R = R.ave, 
+                                             length = size.length.min.um.used.for.conversions,
+                                             width = size.width.min.um.used.for.conversions, 
+                                             height = size.height.min.um.used.for.conversions),
+         particle.volume.um3.max = volumefnx(R = R.ave,
+                                             length = size.length.max.um.used.for.conversions,
+                                             width = size.width.max.um.used.for.conversions, 
+                                             height = size.height.max.um.used.for.conversions)) %>% 
+  #calculate minimum and maximum mass for polydisperse particles
+  mutate(mass.per.particle.mg.min = massfnx(v = particle.volume.um3.min, p = density.g.cm3) * 1e-3) %>% #equation uses g/cm3
+  mutate(mass.per.particle.mg.max = massfnx(v = particle.volume.um3.max, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+  mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+  
+  #calcualte dose metrics accordingly
+  mutate(dose.surface.area.um2.mL.master = particle.surface.area.um2 * dose.particles.mL.master) %>% 
+  mutate(particle.surface.area.um2.mg = particle.surface.area.um2 / mass.per.particle.mg) %>% 
+  
+  #Sediment-based concentration metrics
+  mutate(dose.mg.kg.sediment.master = if_else(!is.na(dose.mg.kg.sed.measured), dose.mg.kg.sed.measured, dose.mg.kg.sed.nominal)) %>% #Create master column with measured concentrations preferred
+  mutate(dose.particles.kg.sediment.master = dose.particles.kg.sed.nominal) %>% #Create master column with measured concentrations preferred (only nominal concentrations available)
+  
+  #Create reported vs. converted columns for sediment-based metrics
+  mutate(dose.mg.kg.sediment.master.converted.reported = if_else(!is.na(dose.mg.kg.sediment.master), "reported", NA_character_)) %>% 
+  mutate(dose.particles.kg.sediment.master.converted.reported = if_else(!is.na(dose.particles.kg.sediment.master), "reported", NA_character_)) %>%  
+
+  #Sediment Mass (converted)
+  mutate(dose.mg.kg.sediment.master = ifelse(is.na(dose.mg.kg.sediment.master), (dose.particles.kg.sediment.master)*mass.per.particle.mg, dose.mg.kg.sediment.master)) %>% 
+  mutate(dose.mg.kg.sediment.master.converted.reported = factor(ifelse((!is.na(dose.mg.kg.sediment.master)&is.na(dose.mg.kg.sediment.master.converted.reported)), "converted", dose.mg.kg.sediment.master.converted.reported))) %>% 
+  
+  #Sediment Count (converted)
+  mutate(dose.particles.kg.sediment.master = ifelse(is.na(dose.particles.kg.sediment.master), (dose.mg.kg.sediment.master)/mass.per.particle.mg, dose.particles.kg.sediment.master)) %>% 
+  mutate(dose.particles.kg.sediment.master.converted.reported = factor(ifelse((!is.na(dose.particles.kg.sediment.master)&is.na(dose.particles.kg.sediment.master.converted.reported)), "converted", dose.particles.kg.sediment.master.converted.reported))) %>%  
+  
+  #Volume
+  mutate(dose.um3.mL.master = particle.volume.um3 * dose.particles.mL.master) %>%  #calculate volume/mL
+  mutate(dose.um3.kg.sediment.master = particle.volume.um3 * dose.particles.kg.sediment.master) %>% #calculate volume/kg sediment
+  
+  #Surface Area
+  mutate(dose.um2.mL.master = as.numeric(particle.surface.area.um2) * dose.particles.mL.master) %>% 
+  mutate(dose.um2.kg.sediment.master = as.numeric(particle.surface.area.um2) * dose.particles.kg.sediment.master) %>% 
+  
+  #Specific Surface Area
+  mutate(dose.um2.ug.mL.master = dose.um2.mL.master / (mass.per.particle.mg / 1000)) %>% #correct mg to ug
+  mutate(dose.um2.ug.kg.sediment.master = dose.um2.kg.sediment.master/(mass.per.particle.mg / 1000)) %>% 
+  
   #Additional tidying for nicer values
   mutate(authors = gsub(".", " & ", as.character(authors), fixed = TRUE)) %>% 
   mutate(exposure.media = gsub(".", " ", as.character(exposure.media), fixed = TRUE)) %>%
@@ -739,34 +832,7 @@ aoc_setup <- aoc_v1 %>% # start with original dataset
   mutate(clean.method = if_else(clean.method == "N", "Not Cleaned", clean.method)) %>% 
   mutate(particle.behavior = gsub(".", " ", as.character(particle.behavior), fixed = TRUE)) %>% 
   mutate(particle.behavior = if_else(particle.behavior == "N", "Not Evaluated", particle.behavior)) %>%
-  mutate(tissue.distribution = gsub(".", " ", as.character(tissue.distribution), fixed = TRUE)) #%>% 
-  # cleanup
-  #mutate( = dose.mg.kg.sed.measured)
-  
-#################PREPARATION FUNCTION #########################
-# prepare data for alignments using prepartion function #
-### preparation function is made in the EcoTox repo, and ported here ##
-### this does all the estimations of volume, surface area, mass, etc.
-aoc_setup <- preparation_fxn(df = aoc_setup,
-                             beta_log10_body_length =  beta_log10_body_length, # Jâms, et al 2020 Nature paper
-                             body_length_intercept = body_length_intercept, # Jâms, et al 2020 Nature paper
-                             H_W_ratio = H_W_ratio, # H:W ratio across all environments/particle types
-                             R.ave.water.marine = R.ave.water.marine, # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
-                             R.ave.water.freshwater =R.ave.water.freshwater, # average length to width ratio of microplastics in freshwater environment (Kooi et al. 2021)
-                             R.ave.sediment.marine = R.ave.sediment.marine, # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
-                             R.ave.sediment.freshwater = R.ave.sediment.freshwater, # average length to width ratio of microplastics in freshwater environment (Kooi et al. 2021)
-                             p.ave.marine = p.ave.marine, #average density in marine surface water
-                             alpha.marine = alpha.marine, #table s4 for marine surface water. length
-                             a.sa.marine = a.sa.marine, #marine surface area power law
-                             a.v.marine = a.v.marine, #a_V for marine surface water volume
-                             a.m.marine = a.m.marine, # upper limit fora_m for mass for marine surface water in table S4 
-                             a.ssa.marine = a.ssa.marine, # A_SSA for marine surface water
-                             p.ave.freshwater = p.ave.freshwater, #average density in freshwater surface water
-                             alpha.freshwater = alpha.freshwater, #table s4 for freshwater surface water. length
-                             a.sa.freshwater = a.sa.freshwater, #freshwater surface area power law
-                             a.v.freshwater = a.v.freshwater, #a_V for freshwater surface water volume
-                             a.m.freshwater = a.m.freshwater, # upper limit fora_m for mass for freshwater surface water in table S4 
-                             a.ssa.freshwater = a.ssa.freshwater) # A_SSA for freshwater surface water)
+  mutate(tissue.distribution = gsub(".", " ", as.character(tissue.distribution), fixed = TRUE))
 
 #### Overview Setup Continued ####
 
@@ -979,4 +1045,3 @@ saveRDS(aoc_z, file = "aoc_z.RDS")
 
 library(crayon)
 cat(blue("ToMEx 1 dataset prepared and RDS files saved in main folder!"))
-}
