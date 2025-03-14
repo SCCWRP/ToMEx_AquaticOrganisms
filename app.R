@@ -182,11 +182,11 @@ ui <- dashboardPage(
                         
                         p(align = "center", "Dr. Leah Thornton Hampton, Southern California Coastal Water Research Project"),
                         
+                        p(align = "center", "Dr. Scott Coffin, California Office of Environmental Health Hazard Assessment"),
+                        
                         p(align = "center", "Dana Briggs Wyler, Southern California Coastal Water Research Project"),
                         
                         p(align = "center", "Dr. Bethanie Carney Almroth, University of Gothenburg"),
-                        
-                        p(align = "center", "Dr. Scott Coffin, California Office of Environmental Health Hazard Assessment"),
                         
                         p(align = "center", "Dr. Win Cowger, Moore Institute for Plastic Pollution Research"),
                         
@@ -695,7 +695,7 @@ tabItem(tabName = "Exploration",
                         pickerInput(inputId = "poly_check", 
                         label = "Polymer:",
                         choices = levels(aoc_setup$poly_f),
-                        selected = levels(aoc_setup$poly_f),
+                        selected = setdiff(levels(aoc_setup$poly_f), "Not Reported"),
                         options = list(`actions-box` = TRUE),
                         multiple = TRUE)),
                         
@@ -703,8 +703,8 @@ tabItem(tabName = "Exploration",
                       column(width = 4,
                         pickerInput(inputId = "shape_check", 
                         label = "Shape:",
+                        selected = setdiff(levels(aoc_setup$shape_f), "Not Reported"),
                         choices = levels(aoc_setup$shape_f),
-                        selected = levels(aoc_setup$shape_f),
                         options = list(`actions-box` = TRUE),
                         multiple = TRUE)),
                       
@@ -890,7 +890,7 @@ tabItem(tabName = "Exploration",
                       column(width = 7,
                              numericInput(inputId = "upper.tissue.trans.size.um",
                                                   label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
-                                                  value = 83))),
+                                                  value = 88))),
                 ) #Close COnditionalPaneel
                       
              ) #close tabpanel  
@@ -1051,7 +1051,7 @@ tabItem(tabName = "SSD",
                                   pickerInput(inputId = "Group_check_ssd", 
                                   label = "Organism Group:",
                                   choices = levels(aoc_z$Group),
-                                  selected = c("Annelida","Cnidaria", "Crustacea", "Echinoderm", "Fish", "Insect", "Mixed", "Mollusca", "Rotifera", "Dinoflagellate", "Ciliophora"),
+                                  selected = c("Annelida", "Algae", "Cnidaria", "Crustacea", "Echinoderm", "Fish", "Insect", "Mixed", "Mollusca", "Rotifera", "Dinoflagellate", "Ciliophora"),
                                   options = list(`actions-box` = TRUE), 
                                   multiple = TRUE),
                                   
@@ -1101,7 +1101,7 @@ tabItem(tabName = "SSD",
                                  pickerInput(inputId = "poly_check_ssd", 
                                  label = "Polymer:",
                                  choices = levels(aoc_z$poly_f),
-                                 selected = levels(aoc_z$poly_f),
+                                 selected = setdiff(levels(aoc_z$poly_f), "Not Reported"),
                                  options = list(`actions-box` = TRUE), 
                                  multiple = TRUE)),
                               
@@ -1110,7 +1110,7 @@ tabItem(tabName = "SSD",
                                  pickerInput(inputId = "shape_check_ssd", 
                                  label = "Shape:",
                                  choices = levels(aoc_z$shape_f),
-                                 selected = levels(aoc_z$shape_f),
+                                 selected = setdiff(levels(aoc_z$shape_f), "Not Reported"),
                                  options = list(`actions-box` = TRUE), 
                                  multiple = TRUE)), 
                           
@@ -1273,7 +1273,7 @@ tabItem(tabName = "SSD",
                           column(width = 7,
                                  numericInput(inputId = "upper.tissue.trans.size.um_ssd",
                                               label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
-                                              value = 83))
+                                              value = 88))
                           ) # close fluidrow
                         ) #Close ConditionalPanel
                           
@@ -1617,7 +1617,7 @@ tabItem(tabName = "Calculators",
                                 column(width = 4,
                                        numericInput(inputId = "upper.tissue.trans.size.um_calculator",
                                                     label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
-                                                    value = 83))
+                                                    value = 88))
                                 ),
                          
                          column(width = 12,
@@ -2557,7 +2557,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   
     ## ERM parameterization from user input ##
     # Define params for correction #
-    alpha <- input$alpha #length power law exponent
+    alpha.input <- input$alpha #length power law exponent
     x2D_set <- as.numeric(input$upper_length) #upper size range (default - user defined)
     x1D_set <- input$lower_length #lower size range (default - user defined)
     x1M_set <- input$lower_length #lower size range for ingestible plastic (user defined)
@@ -2566,32 +2566,32 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     
     # define parameters for power law coefficients
-    a.sa <- input$a.sa #1.5 #marine surface area power law
-    a.v <- input$a.v #1.48 #a_V for marine surface water volume
-    a.m <- input$a.m #1.32 # upper limit fora_m for mass for marine surface water in table S4 
-    a.ssa <- input$a.ssa #1.98 # A_SSA for marine surface water
+    a.sa.input <- input$a.sa #1.5 #marine surface area power law
+    a.v.input <- input$a.v #1.48 #a_V for marine surface water volume
+    a.m.input <- input$a.m #1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa.input <- input$a.ssa #1.98 # A_SSA for marine surface water
     
     #define additional parameters for calculations based on averages in the environment
-    R.ave <- input$R.ave #0.77 #average width to length ratio for microplastics in marine enviornment
-    p.ave <- input$p.ave #1.10 #average density in marine surface water
+    R.ave.input <- input$R.ave #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave.input <- input$p.ave #1.10 #average density in marine surface water
     
     print("Performing alignments on exploration dataset..")
     
     # calculate ERM for each species
     aoc_setup <- aoc_setup %>% 
       # explicitly add vars to dataframe instead of leaving as global vars - otherwise mux.poly.generalizable fnx will fail
-      mutate(alpha = alpha,
+      mutate(alpha = alpha.input,
              x2D_set = x2D_set,
              x1D_set = x1D_set,
              x1M_set = x1M_set,
              upper.tissue.trans.size.um = upper.tissue.trans.size.um,
              ingestion.translocation.switch = ingestion.translocation.switch,
-             a.sa = a.sa,
-             a.v = a.v,
-             a.m = a.m,
-             a.ssa = a.ssa,
-             R.ave = R.ave,
-             p.ave = p.ave,
+             a.sa = a.sa.input,
+             a.v = a.v.input,
+             a.m = a.m.input,
+             a.ssa = a.ssa.input,
+             R.ave = R.ave.input,
+             p.ave = p.ave.input,
              H_W_ratio = 0.67
       ) %>% 
       ### BIOACCESSIBILITY ###
@@ -2607,7 +2607,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
       mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
                              ingestion.translocation == "translocation" ~ x2M_trans)) %>% 
-      
       ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     ## calculate size parameters using compartment characteristics
     mutate(size.width.min.um.used.for.conversions = case_when(
@@ -2700,6 +2699,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         dose_check == "µm3/kg sediment" ~ dose.particles.kg.sediment.master,
         dose_check == "µm2/kg sediment" ~ dose.particles.kg.sediment.master,
         dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.sediment.master)) %>% 
+      #ensure algae never considered for food dilution
+      mutate(EC_mono_p.particles.mL = case_when(
+        ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        T ~ EC_mono_p.particles.mL)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
@@ -2760,10 +2763,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
-      # ensure algae are never considered for food dilution
-      # mutate(EC_env_v.particles.mL = case_when(
-      #   organism.group == "Algae" ~ NA,
-      #   T ~ EC_env_v.particles.mL)) %>% 
       
       # Mass ERM #
       ##--- environmental calculations ---###
@@ -3787,8 +3786,8 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     filter(acute.chronic_f %in% acute.chronic.c) %>% #acute/chronic
     filter(tier_zero_tech_f %in% tech_tier_zero_c) %>%  #technical quality
     filter(tier_zero_risk_f %in% risk_tier_zero_c)  %>%  #risk assessment quality
-    filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, upper.tissue.trans.size.um), #if tissue-trans limited, don't use data with non-translocatable particles
-                      ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set))) %>%  #if ingestion-limited, don't use data outside upper default size range
+    filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
+                      ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
     # remove invalid data
         filter(dose_new > 0) %>% 
     drop_na(dose_new)
@@ -4598,7 +4597,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     ## ERM parametrization ##
     # Define params for alignments #
-    alpha = as.numeric(input$alpha_ssd) #length power law exponent
+    alpha.input = as.numeric(input$alpha_ssd) #length power law exponent
     x2D_set = as.numeric(input$upper_length_ssd) #upper size range (default)
     x1D_set = as.numeric(input$lower_length_ssd) #lower size range (default)
     x1M_set = as.numeric(input$lower_length_ssd) #lower size range for ingestible plastic (user defined)
@@ -4606,34 +4605,35 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     ingestion.translocation.switch <- input$ingestion.translocation.switch_ssd #user-defined: inputs are "ingestion" or "translocation"
     
     # define parameters for power law coefficients
-    a.sa = as.numeric(input$a.sa_ssd) #1.5 #marine surface area power law
-    a.v = as.numeric(input$a.v_ssd) #1.48 #a_V for marine surface water volume
-    a.m = as.numeric(input$a.m_ssd) #1.32 # upper limit fora_m for mass for marine surface water in table S4 
-    a.ssa = as.numeric(input$a.ssa_ssd) #1.98 # A_SSA for marine surface water
+    a.sa.input = as.numeric(input$a.sa_ssd) #1.5 #marine surface area power law
+    a.v.input = as.numeric(input$a.v_ssd) #1.48 #a_V for marine surface water volume
+    a.m.input = as.numeric(input$a.m_ssd) #1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa.input = as.numeric(input$a.ssa_ssd) #1.98 # A_SSA for marine surface water
     
     #define additional parameters for calculations based on averages in the environment
-    R.ave = as.numeric(input$R.ave_ssd) #0.77 #average width to length ratio for microplastics in marine enviornment
-    p.ave = as.numeric(input$p.ave_ssd) #1.10 #average density in marine surface water
+    R.ave.input = as.numeric(input$R.ave_ssd) #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave.input = as.numeric(input$p.ave_ssd) #1.10 #average density in marine surface water
     
-    print(paste("Performing alignments for:", "alpha:", alpha, "x2D_set:", x2D_set,
-                "x1D_set:", x1D_set, "x1M_set:", x1M_set, "a.sa:", a.sa, "a.v:", a.v, "a.m:", a.m, "a.ssa:", a.ssa))
+    print(paste("Performing alignments for:", "alpha:", alpha.input, "x2D_set:", x2D_set,
+                "x1D_set:", x1D_set, "x1M_set:", x1M_set, "a.sa:", a.sa.input, "a.v:", a.v.input,
+                "a.m:", a.m.input, "a.ssa:", a.ssa.input, "R.ave:", R.ave.input, "p.ave:", p.ave.input))
   
 
     # calculate ERM for each species
     aoc_z <- aoc_z %>%
       # explicitly add vars to dataframe instead of leaving as global vars - otherwise mux.poly.generalizable fnx will fail
-      mutate(alpha = alpha,
+      mutate(alpha = alpha.input,
              x2D_set = x2D_set,
              x1D_set = x1D_set,
              x1M_set = x1M_set,
              upper.tissue.trans.size.um = upper.tissue.trans.size.um,
              ingestion.translocation.switch = ingestion.translocation.switch,
-             a.sa = a.sa,
-             a.v = a.v,
-             a.m = a.m,
-             a.ssa = a.ssa,
-             R.ave = R.ave,
-             p.ave = p.ave,
+             a.sa = a.sa.input,
+             a.v = a.v.input,
+             a.m = a.m.input,
+             a.ssa = a.ssa.input,
+             R.ave = R.ave.input,
+             p.ave = p.ave.input,
              H_W_ratio = 0.67 #default in Kooi et al. (2021)
              ) %>% 
       ### BIOACCESSIBILITY ###
@@ -4741,7 +4741,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         dose_check == "µm3/kg sediment" ~ dose.particles.kg.sediment.master,
         dose_check == "µm2/kg sediment" ~ dose.particles.kg.sediment.master,
         dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.sediment.master)) %>%
-
+      #algae never considered for food dilution
+      mutate(EC_mono_p.particles.mL = case_when(
+        ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        T ~ EC_mono_p.particles.mL)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
@@ -4805,11 +4808,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
-      # ensure algae are never considered for food dilution
-      mutate(EC_env_v.particles.mL = case_when(
-        Group == "Algae" ~ NA,
-        T ~ EC_env_v.particles.mL)) %>% 
-      
       # Mass ERM #
       ##--- environmental calculations ---###
       #calculate lower ingestible mass
@@ -5821,7 +5819,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                   (AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "No") ~ (af.time),
                                   (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (af.noec),
                                   (AF.time_r_ssd == "No" & AF.noec_r_ssd == "No") ~ 1)) %>% 
-      mutate(dose_new = dose_new * AF.total) %>% 
+      mutate(dose_new = dose_new / AF.total) %>% 
       # mutate(dose_new = case_when((AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "Yes") ~ (dose_new / (af.time * af.noec)), #composite assessment factors
       #                             (AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "No") ~ (dose_new / af.time),
       #                             (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (dose_new / af.noec),
@@ -5843,16 +5841,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       dplyr::filter(effect.metric %in% effect_metric_rad) %>%  #filter for effect metric
       dplyr::filter(acute.chronic_f %in% acute.chronic.c_ssd) %>%  #acute chronic filter
       dplyr::filter(risk.13 != 0) %>%  #Drop studies that received a score of 0 for endpoints criteria (this also drops studies that have not yet been scored) - KEEP THIS AFTER THE RED CRITERIA FILTERS  
-      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, upper.tissue.trans.size.um), #if tissue-trans limited, don't use data with non-translocatable particles
-                       ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set))) %>%  #if ingestion-limited, don't use data outside upper default size range
+      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
+                       ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
       group_by(Species) %>% 
       drop_na(dose_new) %>% 
       # make sure we're not using a multiplicity of doses that are identical
-      distinct(Species, doi, dose_new, poly_f, shape_f, .keep_all = T) 
+      distinct(Species, doi, dose.particles.mL.master, poly_f, shape_f, .keep_all = T) 
   })
     
-    aoc_z_L <- eventReactive(list(input$SSDgo),{aoc_ssd_filtered() %>% 
-            summarise(MinConcTested = min(dose_new), MaxConcTested = max(dose_new), CountTotal = n())# %>%   #summary data for whole database
+    aoc_z_L <- eventReactive(list(input$SSDgo),{
+      aoc_ssd_filtered() %>% 
+            summarise(MinConcTested = min(dose_new), 
+                      MaxConcTested = max(dose_new),
+                      CountStudies = n_distinct(doi),
+                      CountTotal = n_distinct(dose.particles.mL.master))# %>%   #summary data for whole database
      # mutate_if(is.numeric, ~ signif(., 6))
         })
   
@@ -5890,15 +5892,15 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     ingestion.translocation.switch <- input$ingestion.translocation.switch_ssd #user-defined: inputs are "ingestion" or "translocation"
     
     # define parameters for power law coefficients
-    alpha = input$alpha_ssd #length power law exponent
-    a.sa = input$a.sa_ssd #1.5 #marine surface area power law
-    a.v = input$a.v_ssd#1.48 #a_V for marine surface water volume
-    a.m = input$a.m_ssd#1.32 # upper limit fora_m for mass for marine surface water in table S4 
-    a.ssa = input$a.ssa_ssd #1.98 # A_SSA for marine surface water
+    alpha.input = input$alpha_ssd #length power law exponent
+    a.sa.input = input$a.sa_ssd #1.5 #marine surface area power law
+    a.v.input = input$a.v_ssd#1.48 #a_V for marine surface water volume
+    a.m.input = input$a.m_ssd#1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa.input = input$a.ssa_ssd #1.98 # A_SSA for marine surface water
     
     #define additional parameters for calculations based on averages in the environment
-    R.ave = input$R.ave_ssd #0.77 #average width to length ratio for microplastics in marine enviornment
-    p.ave = input$p.ave_ssd#1.10 #average density in marine surface water
+    R.ave.input = input$R.ave_ssd #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave.input = input$p.ave_ssd#1.10 #average density in marine surface water
     
     # calculate ERM for each species
     aoc_z <- aoc_z %>%
@@ -5908,13 +5910,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              x1M_set = x1M_set,
              upper.tissue.trans.size.um = upper.tissue.trans.size.um,
              ingestion.translocation.switch = ingestion.translocation.switch,
-             alpha = alpha,
-             a.sa = a.sa,
-             a.v = a.v,
-             a.m = a.m,
-             a.ssa = a.ssa,
-             R.ave = R.ave,
-             p.ave = p.ave,
+             alpha = alpha.input,
+             a.sa = a.sa.input,
+             a.v = a.v.input,
+             a.m = a.m.input,
+             a.ssa = a.ssa.input,
+             R.ave = R.ave.input,
+             p.ave = p.ave.input,
              H_W_ratio = 0.67 #Kooi et al. (2021) default
       ) %>% 
       ### BIOACCESSIBILITY ###
@@ -6023,6 +6025,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       dose_check == "µm3/kg sediment" ~ dose.particles.kg.sediment.master,
       dose_check == "µm2/kg sediment" ~ dose.particles.kg.sediment.master,
       dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.sediment.master)) %>%
+    #  ensure algae never considered for food dilution
+      mutate(EC_mono_p.particles.mL = case_when(
+        ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        T ~ EC_mono_p.particles.mL)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
@@ -6085,11 +6091,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
-      # ensure algae are never considered for food dilution
-      mutate(EC_env_v.particles.mL = case_when(
-        Group == "Algae" ~ NA,
-        T ~ EC_env_v.particles.mL)) %>% 
-      
       # Mass ERM #
       ##--- environmental calculations ---###
       #calculate lower ingestible mass
@@ -7099,7 +7100,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                   (AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "No") ~ (af.time),
                                   (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (af.noec),
                                   (AF.time_r_ssd == "No" & AF.noec_r_ssd == "No") ~ 1)) %>% 
-      mutate(dose_new = dose_new * AF.total) %>% 
+      mutate(dose_new = dose_new / AF.total) %>% 
       # mutate(dose_new = case_when((AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "Yes") ~ (dose_new / (af.time * af.noec)), #composite assessment factors
       #                             (AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "No") ~ (dose_new / af.time),
       #                             (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (dose_new / af.noec),
@@ -7120,12 +7121,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       dplyr::filter(tier_zero_tech_f %in% tech_tier_zero_c_ssd) %>% #technical quality
       dplyr::filter(tier_zero_risk_f %in% risk_tier_zero_c_ssd) %>%  #risk assessment quality
       dplyr::filter(risk.13 != 0) %>%  #Drop studies that received a score of 0 for endpoints criteria (this also drops studies that have not yet been scored) - KEEP THIS AFTER THE RED CRITERIA FILTERS  
-      filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, upper.tissue.trans.size.um), #if tissue-trans limited, don't use data with non-translocatable particles
-                       ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set))) %>%  #if ingestion-limited, don't use data outside upper default size range
+      filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
+                       ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
       drop_na(dose_new) %>%  #must drop NAs or else nothing will work
       filter(dose_new > 0) %>% 
       # make sure we're not using a multiplicity of doses that are identical
-      distinct(Species, doi, dose_new, poly_f, shape_f, .keep_all = T) %>% 
+            distinct(Species, doi, dose.particles.mL.master, poly_f, shape_f, .keep_all = T) %>% 
       group_by(Species, Group) %>%
       summarise(geomeanEffect = exp(mean(log(dose_new))),
                 minConcEffect = min(dose_new), meanConcEffect = mean(dose_new, na.rm = T), 
@@ -7195,7 +7196,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     #join datasets (final)
     aoc_z_join <- right_join(aoc_z_L(), aoc_z_R(), by = "Species") 
     #order list
-    col_order <- c("Group", "Species", "Conc", "MinEffectType", "Minlvl2EffectType", "MinEnvironment", "MinDoi", "minConcEffect", "CI95_LCL", "firstQuartileConcEffect", "meanConcEffect", "medianConcEffect", "thirdQuartileConcEffect", "CI95_UCL", "MaxConcEffect", "SDConcEffect", "CountEffect", "MinConcTested", "MaxConcTested", "CountTotal")
+    col_order <- c("Group", "Species", "Conc", "MinEffectType", "Minlvl2EffectType", 
+                   "MinEnvironment", "MinDoi", "minConcEffect", "CI95_LCL", "firstQuartileConcEffect",
+                   "meanConcEffect", "medianConcEffect", "thirdQuartileConcEffect", "CI95_UCL", "MaxConcEffect",
+                   "SDConcEffect", "CountEffect", "MinConcTested", "MaxConcTested", "CountStudies", "CountTotal")
     #reorder
     aoc_z_join_order <- aoc_z_join[, col_order]
     
@@ -7218,7 +7222,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                 scrollY = 400,
                 scrollH = TRUE,
                 sScrollX = TRUE),
-              colnames = c("Group", "Species", paste0("Most Sensitive Concentration ",  dose_check_ssd), "Min Conc. Broad Endpoint", "Min Conc. Specfic Endpoint", "Min Environment", "DOI", "Minimum Effect Concentration", "95% Lower CI Effect Concentration", "1st Quartile Effect Concentration", "Average Effect Concentration", "Median Effect Concentration", "3rd Quartile Effect Concentration", "95% Upper CI Concentration", "Maximum Observed Effect Concentration", "Std Dev Effect Concentration", "Number of doses with Effects", "Min Concentration Tested (with or without effects)", "Max Concentration Tested (with or without effects)", "Total # Doses Considered"),
+              colnames = c("Group", "Species", paste0("Most Sensitive Concentration ",  dose_check_ssd), "Min Conc. Broad Endpoint", "Min Conc. Specfic Endpoint", "Min Environment", "DOI", "Minimum Effect Concentration", "95% Lower CI Effect Concentration", "1st Quartile Effect Concentration", "Average Effect Concentration", "Median Effect Concentration", "3rd Quartile Effect Concentration", "95% Upper CI Concentration", "Maximum Observed Effect Concentration", "Std Dev Effect Concentration", "Number of doses with Effects", "Min Concentration Tested (with or without effects)", "Max Concentration Tested (with or without effects)", "Total Studies", "Total PODs"),
               caption = "Filtered Data") %>% 
       formatStyle(
         "Conc",
@@ -7903,7 +7907,15 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         input$dose_check_ssd == "µm2/kg sediment" ~ dose.um2.kg.sediment.master,
         input$dose_check_ssd == "µm2/µg/kg sediment" ~ dose.um2.ug.kg.sediment.master)) %>%  
       dplyr::select(Group, Species, env_f,  dose_new, `Dose Metric`, Alignment, ingestion.translocation,
-                    `Unaligned Dose Values`, effect.metric, acute.chronic_f,
+                    `Unaligned Dose Values`,
+                    EC_env_v.particles.mL, EC_poly_v.particles.mL,
+                    EC_mono_p.particles.mL, mu.v.mono, 
+                    particle.volume.um3.min, particle.volume.um3.max,
+                    R.ave,
+                    mu.v.poly,
+                    
+                    effect.metric, acute.chronic_f,
+                    x2M, EC_poly_p.particles.mL,  CF_bio,
                     AF.total, 
                     max.size.ingest.um, body.length.cm, 
                     lvl1_f, lvl2_f,
@@ -7911,7 +7923,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                     particle.surface.area.um2,  particle.volume.um3,  mass.per.particle.mg, density.g.cm3,
                     polydispersity,
                     doi, authors, year
-                    )
+                    ) %>% arrange(dose_new)
     
     
     dt <- datatable(ssd_raw_data_tidy,
@@ -8157,7 +8169,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     ## ERM parametrization ##
     # Define params for alignments #
-    alpha = input$alpha_calculator #length power law exponent
+    alpha.input = input$alpha_calculator #length power law exponent
     x2D_set = as.numeric(input$upper_length_calculator) #upper size range (default)
     x1D_set = input$lower_length_calculator #lower size range (default)
     x1M_set = input$lower_length_calculator #lower size range for ingestible plastic (user defined)
@@ -8166,30 +8178,30 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     ERM.switch <- input$ERM_check_calculator
     
     # define parameters for power law coefficients
-    a.sa = input$a.sa_calculator #1.5 #marine surface area power law
-    a.v = input$a.v_calculator#1.48 #a_V for marine surface water volume
-    a.m = input$a.m_calculator#1.32 # upper limit fora_m for mass for marine surface water in table S4 
-    a.ssa = input$a.ssa_calculator #1.98 # A_SSA for marine surface water
+    a.sa.input = input$a.sa_calculator #1.5 #marine surface area power law
+    a.v.input = input$a.v_calculator#1.48 #a_V for marine surface water volume
+    a.m.input = input$a.m_calculator#1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa.input = input$a.ssa_calculator #1.98 # A_SSA for marine surface water
     
     #define additional parameters for calculations based on averages in the environment
-    R.ave = input$R.ave_calculator #0.77 #average width to length ratio for microplastics in marine enviornment
-    p.ave = input$p.ave_calculator#1.10 #average density in marine surface water
+    R.ave.input = input$R.ave_calculator #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave.input = input$p.ave_calculator#1.10 #average density in marine surface water
     
     # calculate ERM for each species
     aligned <- raw %>%
       #print values used to align
-      mutate(alpha = alpha,
+      mutate(alpha = alpha.input,
              x2D_set = x2D_set,
              x1D_set = x1D_set,
              x1M_set = x1M_set,
              upper.tissue.trans.size.um = upper.tissue.trans.size.um,
              ingestion.translocation.switch = ingestion.translocation.switch,
-             a.sa = a.sa,
-             a.v = a.v,
-             a.m = a.m,
-             a.ssa = a.ssa,
-             p.ave = p.ave,
-             R.ave = R.ave,
+             a.sa = a.sa.input,
+             a.v = a.v.input,
+             a.m = a.m.input,
+             a.ssa = a.ssa.input,
+             p.ave = p.ave.input,
+             R.ave = R.ave.input,
              H_W_ratio = 0.67 #Kooi et al. (2021)
              ) %>% 
       ### BIOACCESSIBILITY ###
@@ -8283,7 +8295,24 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       ### Particle ERM ###
       # calculate effect threshold for particles
-      mutate(EC_mono_p.particles.mL = dose.particles.mL.master) %>% 
+      # calculate effect threshold for particles
+      mutate(EC_mono_p.particles.mL = case_when(
+        #Water-based concentrations
+        dose_check == "Particles/mL" ~ dose.particles.mL.master,
+        dose_check == "µg/mL" ~ dose.particles.mL.master,
+        dose_check == "µm3/mL" ~ dose.particles.mL.master,
+        dose_check == "µm2/mL" ~ dose.particles.mL.master,
+        dose_check == "µm2/µg/mL" ~ dose.particles.mL.master,
+        #Sediment-based concentrations
+        dose_check == "Particles/kg sediment" ~ dose.particles.kg.sediment.master,
+        dose_check == "mg/kg sediment" ~ dose.particles.kg.sediment.master,
+        dose_check == "µm3/kg sediment" ~ dose.particles.kg.sediment.master,
+        dose_check == "µm2/kg sediment" ~ dose.particles.kg.sediment.master,
+        dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.sediment.master)) %>% 
+      #ensure algae never considered for food dilution
+      mutate(EC_mono_p.particles.mL = case_when(
+        ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        T ~ EC_mono_p.particles.mL)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
@@ -8347,11 +8376,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
-      # ensure algae are never considered for food dilution
-      mutate(EC_env_v.particles.mL = case_when(
-        Group == "Algae" ~ NA,
-        T ~ EC_env_v.particles.mL)) %>% 
-      
       #### mass ERM ###
       ##--- environmental calculations ---###
       #calculate lower ingestible mass
