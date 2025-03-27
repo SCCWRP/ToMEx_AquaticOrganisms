@@ -3,6 +3,10 @@
 #### Code contributors: Heili Lowman, Leah Thornton Hampton, Scott Coffin, Emily Darin
 
 #### Setup ####
+# Load functions
+source("functions.R")
+# custom fxn to check and install the required ver of ssdtools
+check_and_install_version("ssdtools", "0.3.7")
 
 # Load packages
 library(tidyverse) #General everything
@@ -15,7 +19,6 @@ library(shinythemes) #Shiny theme for the page
 library(shinyWidgets) #Widgets
 library(scales) #SSD - Use the percent format
 library(reshape2) #Overview tab - melts bars together
-library(ssdtools) #SSD package
 library(DT) #Build HTML data tables
 library(plotly) #Make plots interactive
 library(viridis) #Colors
@@ -33,6 +36,8 @@ library(GeneralizedHyperbolic) ## normal-inverse Gaussian
 library(stats)
 library(caret) # for random forest predictions
 library(randomForest) # for random forest predictions
+
+
 
 # ensure correct version of ssdtools is installed
 #install.packages("https://cran.r-project.org/src/contrib/Archive/ssdtools/ssdtools_0.3.7.tar.gz", repos=NULL, type="source")
@@ -64,8 +69,7 @@ valid_values <- readr::read_csv("prediction/valid_values.csv") %>%  dplyr::selec
 train_data_prediction <- readr::read_csv("prediction/training_data_prediction.csv") %>% mutate_if(is.character, factor) %>%  dplyr::select(-`...1`) #contains spaces!
 
 
-# Load functions
-source("functions.R")
+
 
 ## Create environmentally realistic data
 synthetic_data_builder <- function(count){
@@ -2654,6 +2658,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
         polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
     ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
       # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
       ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
     mutate(size.length.max.um.used.for.conversions = case_when(
@@ -2693,6 +2711,21 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                 T ~ size.length.max.um.used.for.conversions),
            size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
                                                  T ~ size.length.max.um.used.for.conversions)) %>% 
+      
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
       ##### ----- WIDTH ------ ###
       ## Monodisperse ##
       mutate(size.width.um.used.for.conversions = case_when(
@@ -4829,6 +4862,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
         polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
     ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
       # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
       ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
     mutate(size.length.max.um.used.for.conversions = case_when(
@@ -6129,6 +6176,8 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       dplyr::filter(risk.13 != 0) %>%  #Drop studies that received a score of 0 for endpoints criteria (this also drops studies that have not yet been scored) - KEEP THIS AFTER THE RED CRITERIA FILTERS  
       dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
                        ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
+      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  translocatable != "not translocatable", #if tissue-trans limited, don't use data with non-translocatable particles
+                              ingestion.translocation.switch == "ingestion" ~  ingestible != "not ingestible")) %>%  #if ingestion-limited, don't use data outside upper default size range)
       group_by(Species) %>% 
       drop_na(dose_new)# %>% 
       # make sure we're not using a multiplicity of doses that are identical
@@ -6232,6 +6281,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
           polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
           polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
       ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
       # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
       ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
     mutate(size.length.max.um.used.for.conversions = case_when(
@@ -7522,8 +7585,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       dplyr::filter(tier_zero_tech_f %in% tech_tier_zero_c_ssd) %>% #technical quality
       dplyr::filter(tier_zero_risk_f %in% risk_tier_zero_c_ssd) %>%  #risk assessment quality
       dplyr::filter(risk.13 != 0) %>%  #Drop studies that received a score of 0 for endpoints criteria (this also drops studies that have not yet been scored) - KEEP THIS AFTER THE RED CRITERIA FILTERS  
-      filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
-                       ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
+      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
+                              ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
+      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  translocatable != "not translocatable", #if tissue-trans limited, don't use data with non-translocatable particles
+                              ingestion.translocation.switch == "ingestion" ~  ingestible != "not ingestible")) %>%  #if ingestion-limited, don't use data outside upper default size range)
       drop_na(dose_new) %>%  #must drop NAs or else nothing will work
       filter(dose_new > 0) %>% 
       # make sure we're not using a multiplicity of doses that are identical
@@ -8641,6 +8706,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
         polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
     ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
       # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
       ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
     mutate(size.length.max.um.used.for.conversions = case_when(
