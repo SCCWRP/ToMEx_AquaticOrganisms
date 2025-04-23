@@ -43,14 +43,13 @@ library(randomForest) # for random forest predictions
 #install.packages("https://cran.r-project.org/src/contrib/Archive/ssdtools/ssdtools_0.3.7.tar.gz", repos=NULL, type="source")
 
 # Load finalized dataset (prepped in RDAmaker.R)
-aoc <- readRDS("aoc_setup_tomex2.RDS") %>% filter(!doi %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) #filter out Capolupo et al. (2021) and
+aoc <- readRDS("aoc_setup_tomex2.RDS")
 aoc_endpoint <- readRDS("aoc_endpoint_tomex2.RDS")
-aoc_quality <- readRDS("aoc_quality_tomex2.RDS") %>% filter(!doi %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) #filter out Capolupo et al. (2021) and
-aoc_search <- readRDS("aoc_search_tomex2.RDS") %>% filter(!DOI %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) #filter out Capolupo et al. (2021) and
-aoc_setup <- readRDS("aoc_setup_tomex2.RDS") %>% filter(!doi %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) %>%  #filter out Capolupo et al. (2021) and
-  mutate(Group = org_f)
+aoc_quality <- readRDS("aoc_quality_tomex2.RDS")
+aoc_search <- readRDS("aoc_search_tomex2.RDS")
+aoc_setup <- readRDS("aoc_setup_tomex2.RDS") %>% mutate(Group = org_f)
 # aoc_v1 <- readRDS("aoc_v1.RDS")
-aoc_z <- readRDS("aoc_z_tomex2.RDS") %>% filter(!doi %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) #filter out Capolupo et al. (2021) and
+aoc_z <- readRDS("aoc_z_tomex2.RDS")
 
 # aoc_setup <- aoc_setup %>%
 #  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
