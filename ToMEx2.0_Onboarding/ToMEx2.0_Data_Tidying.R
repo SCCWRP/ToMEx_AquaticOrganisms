@@ -728,7 +728,7 @@ tomex2.0_aoc_setup = tomex2.0_aoc_setup %>% select(-median_density)
 
 #Create summary data frame from ToMEx 1.0
   bodysize_summary <- aoc_setup %>%
-    distinct(species_f, body.length.cm, body.size.source, max.size.ingest.mm, max.size.ingest.um) 
+    distinct(species_f, life_f, body.length.cm, body.size.source, max.size.ingest.mm, max.size.ingest.um) 
 
   bodysize_addons <- read_csv("gape_size.csv")
     
@@ -839,7 +839,7 @@ tomex2.0_aoc_setup_final <- bind_rows(aoc_setup, tomex2.0_aoc_setup) %>%
   mutate(source = as.factor(source))
 
 #### FIX BODY LENGTHs MISSING in BOTH TOMEX1 and TOMEX2
-tomex2.0_aoc_setup_final <- left_join(tomex2.0_aoc_setup_final, bodysize_summary, by = c("species_f"))
+tomex2.0_aoc_setup_final <- left_join(tomex2.0_aoc_setup_final, bodysize_summary, by = c("species_f", "life_f"))
 
 ####### Fix missing polymer densities in both TOMEX1 and TOMEX2 ####
 #Identify unique Polymers with NA values in density.g.cm3
