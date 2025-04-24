@@ -728,6 +728,7 @@ tomex2.0_aoc_setup = tomex2.0_aoc_setup %>% select(-median_density)
 
 #Create summary data frame from ToMEx 1.0
   bodysize_summary <- aoc_setup %>%
+    filter(!body.size.source == "reported") %>% 
     distinct(species_f, life_f, body.length.cm, body.size.source, max.size.ingest.mm, max.size.ingest.um) 
 
   bodysize_addons <- read_csv("gape_size.csv")
