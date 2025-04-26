@@ -7,6 +7,7 @@
 source("functions.R")
 # custom fxn to check and install the required ver of ssdtools
 check_and_install_version("ssdtools", "0.3.7")
+library(ssdtools)
 
 # Load packages
 library(tidyverse) #General everything
