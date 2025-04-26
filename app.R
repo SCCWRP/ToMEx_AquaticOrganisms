@@ -38,7 +38,6 @@ library(caret) # for random forest predictions
 library(randomForest) # for random forest predictions
 
 
-
 # ensure correct version of ssdtools is installed
 #install.packages("https://cran.r-project.org/src/contrib/Archive/ssdtools/ssdtools_0.3.7.tar.gz", repos=NULL, type="source")
 
@@ -145,7 +144,7 @@ ui <- dashboardPage(
                     p("The Toxicity of Microplastics Explorer 2.0 (ToMEx 2.0) is a major expansion of the orginal ToMEx database coordinated by SCCWRP through
                               a four-part virtual workshop series of more than 60 researchers from 14 different nations."),
                     
-                    strong(p("Disclaimer: When using ToMEx 2.0, it is highly recommended that underlying data are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
+                    strong(p("Disclaimer: ToMEx is an evolving, community-built tool. When using ToMEx 2.0, it is highly recommended that underlying data and code are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
                     
                     h3("What is the Microplastics Toxicity Database?", align = "center"), 
                     
