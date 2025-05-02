@@ -110,11 +110,11 @@ ui <- dashboardPage(
                      br(),
                      br(),
                      #Twitter icon
-                     menuItem("Human Health", href = "https://sccwrp.shinyapps.io/tomex_20_human_health/", icon = icon("user")),
+                     menuItem("Human Health v1.0", href = "https://sccwrp.shinyapps.io/human_mp_tox_shiny-/", icon = icon("user")),
+                     menuItem("Human Health v2.0", href = "https://sccwrp.shinyapps.io/tomex_20_human_health/", icon = icon("user")),
                      br(),
-                     br(),
-                     #Twitter icon
-                     menuItem("Follow Us on Twitter!", href = "https://twitter.com/ToMExApp", icon = icon("twitter")))
+                     menuItem("Aquatic Organisms v1.1", href = "https://sccwrp.shinyapps.io/aq_mp_tox_shiny/", icon = icon("fish")),
+                     br())
   
                    ), #End dashboard sidebar
 
@@ -762,7 +762,7 @@ tabItem(tabName = "Exploration",
                               radioButtons(inputId = "dose_check", 
                               label = "Dose Metric:",
                               choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL", 
-                                          "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
+                                          "Particles/kg sediment (dry weight)", "mg/kg sediment (dry weight)", "µm3/kg sediment (dry weight)", "µm2/kg sediment (dry weight)", "µm2/µg/kg sediment (dry weight)"),
                               selected = "µg/mL")),
                       
                        column(width = 8,
@@ -1173,7 +1173,7 @@ tabItem(tabName = "SSD",
                                  radioButtons(inputId = "dose_check_ssd", 
                                  label = "Dose Metric:",
                                  choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL",
-                                             "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
+                                             "Particles/kg sediment (dry weight)", "mg/kg sediment (dry weight)", "µm3/kg sediment (dry weight)", "µm2/kg sediment (dry weight)", "µm2/µg/kg sediment (dry weight)"),
                                  selected = "Particles/mL")),
                           
                           column(width = 8,
