@@ -821,40 +821,41 @@ tomex2.0_aoc_setup_final <- bind_rows(aoc_setup, tomex2.0_aoc_setup) %>%
 
 #Create summary data frame from ToMEx 1.0
 bodysize_summary <- readRDS("aoc_setup.RDS") %>%
-  filter(!body.size.source == "reported") %>% 
-  distinct(species_f, life_f, body.length.cm, body.size.source, max.size.ingest.mm, max.size.ingest.um) 
+  filter(!body.size.source == "reported") %>% #exclude the reported values
+  distinct(species_f, life_f, body.length.cm, body.size.source) %>%   
+  #remove values that are updated in the gape_size.csv
+  filter(!species_f %in% c("Carassius auratus", "Hediste diversicolor", "Lumbriculus variegatus", "Tubifex NA", 
+                           "Ostrea edulis", "Oryzias latipes", "Potamopyrgus antipodarum", "Sparus aurata"))
 
 #Grab table of additional body size data to add to database
-bodysize_addons <- read_csv("gape_size.csv") %>%
-  mutate(species_f = as.factor(species_f)) %>% 
-  #annotate whether max size ingest was estimated or reported (all estiamted here)
-  mutate(max.size.ingest.reported.estimated = "estimated")
+bodysize_addons <- read_csv("gape_size.csv") %>% 
+  mutate(species_f = as.factor(species_f)) 
 #add life stage column
-bodysize_addons$life_f <- as.factor("adult")
+bodysize_addons$life_f <- as.factor("Adult")
 
 #Join body sizes to be added together
-bodysize_summary <- bind_rows(bodysize_summary, bodysize_addons) %>% 
-  drop_na(body.length.cm) %>% 
-  distinct(species_f, .keep_all = T)
+bodysize_summary <- bind_rows(bodysize_summary, bodysize_addons)
+
+#Remove duplicated rows
+bodysize_summary <- bodysize_summary[!duplicated(bodysize_summary), ]
+
+#check for duplicated species and life stages
+dupes <- duplicated(bodysize_summary[,c("species_f", "life_f")])
+bodysize_summary[dupes,]
 
 #if there is a value for body size in the tomex2.0 database, mark it as "reported"
 tomex2.0_aoc_setup_final$body.size.source <- ifelse(!is.na(tomex2.0_aoc_setup_final$body.length.cm), "reported", NA)
 
-tomex2.0_aoc_setup_final <- left_join(tomex2.0_aoc_setup_final, bodysize_summary, by = c("species_f", "life_f")) %>%
+tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
+  left_join(bodysize_summary, by = join_by(species_f, life_f)) %>% 
   #if tomex2 already has a body length, keep that one, otherwise replace with an add-on value
   mutate(body.length.cm = ifelse(is.na(body.length.cm.x), body.length.cm.y, body.length.cm.x)) %>% 
   select(-c(body.length.cm.y, body.length.cm.x)) %>% 
   #if tomex2 already has a body length source, keep that one, otherwise replace with an add-on value
   mutate(body.size.source = ifelse(is.na(body.size.source.x), body.size.source.y, body.size.source.x)) %>% 
   select(-c(body.size.source.y, body.size.source.x)) %>% 
-  #if there are NAs for body.length.cm remaining, fill in with the average value for that species and life stage calculated from the database
-  group_by(species_f, life_f) %>% 
-  mutate(length_species_lifestage_avg = mean(unique(body.length.cm), na.rm = TRUE)) %>% 
-  mutate(body.length.cm = ifelse(is.na(body.length.cm), length_species_lifestage_avg, body.length.cm)) %>% 
-  ungroup() %>% 
-  select(-length_species_lifestage_avg) %>% 
-  #calculate maximum ingestible size (if not already in database)
-  mutate(max.size.ingest.mm = ifelse(is.na(max.size.ingest.mm), 10^(0.9341 * log10(body.length.cm * 10) - 1.1200), max.size.ingest.mm)) %>% #(Jamm et al 2020 Nature paper)correction for cm to mm
+  #calculate maximum ingestible size
+  mutate(max.size.ingest.mm = 10^(0.9341 * log10(body.length.cm * 10) - 1.1200)) %>% #(Jamm et al 2020 Nature paper)correction for cm to mm
   mutate(max.size.ingest.um = 1000 * max.size.ingest.mm)
 
 ####### Fix missing polymer densities in both TOMEX1 and TOMEX2 ####
