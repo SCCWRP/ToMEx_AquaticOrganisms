@@ -7,6 +7,7 @@
 source("functions.R")
 # custom fxn to check and install the required ver of ssdtools
 check_and_install_version("ssdtools", "0.3.7")
+library(ssdtools)
 
 # Load packages
 library(ssdtools)
@@ -39,19 +40,17 @@ library(caret) # for random forest predictions
 library(randomForest) # for random forest predictions
 
 
-
 # ensure correct version of ssdtools is installed
 #install.packages("https://cran.r-project.org/src/contrib/Archive/ssdtools/ssdtools_0.3.7.tar.gz", repos=NULL, type="source")
 
 # Load finalized dataset (prepped in RDAmaker.R)
-aoc <- readRDS("aoc_setup_tomex2.RDS") %>% filter(!doi %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) #filter out Capolupo et al. (2021) and
+aoc <- readRDS("aoc_setup_tomex2.RDS")
 aoc_endpoint <- readRDS("aoc_endpoint_tomex2.RDS")
-aoc_quality <- readRDS("aoc_quality_tomex2.RDS") %>% filter(!doi %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) #filter out Capolupo et al. (2021) and
-aoc_search <- readRDS("aoc_search_tomex2.RDS") %>% filter(!DOI %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) #filter out Capolupo et al. (2021) and
-aoc_setup <- readRDS("aoc_setup_tomex2.RDS") %>% filter(!doi %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) %>%  #filter out Capolupo et al. (2021) and
-  mutate(Group = org_f)
+aoc_quality <- readRDS("aoc_quality_tomex2.RDS")
+aoc_search <- readRDS("aoc_search_tomex2.RDS")
+aoc_setup <- readRDS("aoc_setup_tomex2.RDS") %>% mutate(Group = org_f)
 # aoc_v1 <- readRDS("aoc_v1.RDS")
-aoc_z <- readRDS("aoc_z_tomex2.RDS") %>% filter(!doi %in% c("10.1016/j.marpolbul.2021.112369", "10.3390/nano11030649")) #filter out Capolupo et al. (2021) and
+aoc_z <- readRDS("aoc_z_tomex2.RDS")
 
 # aoc_setup <- aoc_setup %>%
 #  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
@@ -112,11 +111,11 @@ ui <- dashboardPage(
                      br(),
                      br(),
                      #Twitter icon
-                     menuItem("Human Health", href = "https://sccwrp.shinyapps.io/tomex_20_human_health/", icon = icon("user")),
+                     menuItem("Human Health v1.0", href = "https://sccwrp.shinyapps.io/human_mp_tox_shiny-/", icon = icon("user")),
+                     menuItem("Human Health v2.0", href = "https://sccwrp.shinyapps.io/tomex_20_human_health/", icon = icon("user")),
                      br(),
-                     br(),
-                     #Twitter icon
-                     menuItem("Follow Us on Twitter!", href = "https://twitter.com/ToMExApp", icon = icon("twitter")))
+                     menuItem("Aquatic Organisms v1.1", href = "https://sccwrp.shinyapps.io/aq_mp_tox_shiny/", icon = icon("fish")),
+                     br())
   
                    ), #End dashboard sidebar
 
@@ -147,7 +146,7 @@ ui <- dashboardPage(
                     p("The Toxicity of Microplastics Explorer 2.0 (ToMEx 2.0) is a major expansion of the orginal ToMEx database coordinated by SCCWRP through
                               a four-part virtual workshop series of more than 60 researchers from 14 different nations."),
                     
-                    strong(p("Disclaimer: When using ToMEx 2.0, it is highly recommended that underlying data are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
+                    strong(p("Disclaimer: ToMEx is an evolving, community-built tool. When using ToMEx 2.0, it is highly recommended that underlying data and code are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
                     
                     h3("What is the Microplastics Toxicity Database?", align = "center"), 
                     
@@ -764,9 +763,9 @@ tabItem(tabName = "Exploration",
                               radioButtons(inputId = "dose_check", 
                               label = "Dose Metric:",
                               choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL", 
-                                          "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
-                              selected = "µg/mL")
-                              ),
+                                          "Particles/kg sediment (dry weight)", "mg/kg sediment (dry weight)", "µm3/kg sediment (dry weight)", "µm2/kg sediment (dry weight)", "µm2/µg/kg sediment (dry weight)"),
+                              selected = "µg/mL")),
+
                       
                        column(width = 8,
 
@@ -1177,7 +1176,10 @@ tabItem(tabName = "SSD",
                                  label = "Dose Metric:",
                                  choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL",
                                              "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
-                                 selected = "Particles/mL")),
+                                             #"Particles/kg sediment (dry weight)", "mg/kg sediment (dry weight)", "µm3/kg sediment (dry weight)", "µm2/kg sediment (dry weight)", "µm2/µg/kg sediment (dry weight)"),
+                                 selected = "Particles/mL"),
+                                 p("Note that sediments are in dry weight.")
+                                 ),
                           
                           column(width = 8,
                                  radioButtons(
@@ -1631,6 +1633,7 @@ tabItem(tabName = "Calculators",
                                        ),
                                 ),
                          br(),
+                         DTOutput("alignment_user_data_dt"),
                         
                          #ERM Checkbox
                          column(width = 12,
@@ -8637,9 +8640,9 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   
   #### create test dataset for alignment calculator from aoc_z ###
   #please keep!
-  # alignment_example_df <- aoc_z %>% 
-  #   select(Group, 
-  #          Species, 
+  # alignment_example_df <- aoc_z %>%
+  #   select(Group,
+  #          Species,
   #          max.size.ingest.um,
   #          dose.particles.mL.master,
   #          polydispersity,
@@ -8651,14 +8654,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   #          dose.particles.kg.sediment.master, size.length.max.um.used.for.conversions,
   #          size.length.min.um.used.for.conversions, size.height.min.um.used.for.conversions,
   #          size.height.max.um.used.for.conversions, size.width.min.um.used.for.conversions,
-  #          size.width.max.um.used.for.conversions, size.length.max.mm.measured, 
-  #          size.length.max.mm.nominal) %>% 
+  #          size.width.max.um.used.for.conversions, size.length.max.mm.measured,
+  #          size.length.max.mm.nominal) %>%
   #   drop_na(dose.particles.mL.master, Species, polydispersity, density.g.cm3, max.size.ingest.um,
   #           size.length.um.used.for.conversions, size.height.um.used.for.conversions
-  #           ) %>% 
-  #   filter(shape_f != "Not Reported") %>% 
+  #           ) %>%
+  #   filter(shape_f != "Not Reported") %>%
   #   sample_n(20)
-  # 
+
   # write.csv(alignment_example_df, "calculator/test_data_calculator.csv")
   
  
@@ -8835,7 +8838,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   })
   
   ### make datatable of user data for UI (prior to alignment) ##
-  alignment_user_data_dt <- renderDataTable({
+  output$alignment_user_data_dt <- renderDataTable({
       req(input$alignment_file)
     
     alignment_user_data <- alignment_user_data()
