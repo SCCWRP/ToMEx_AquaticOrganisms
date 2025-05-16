@@ -9,6 +9,7 @@ source("functions.R")
 check_and_install_version("ssdtools", "0.3.7")
 
 # Load packages
+library(ssdtools)
 library(tidyverse) #General everything
 library(shinydashboard)
 library(RColorBrewer) #color palette
@@ -764,7 +765,8 @@ tabItem(tabName = "Exploration",
                               label = "Dose Metric:",
                               choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL", 
                                           "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
-                              selected = "µg/mL")),
+                              selected = "µg/mL")
+                              ),
                       
                        column(width = 8,
 
@@ -1590,7 +1592,8 @@ tabItem(tabName = "Calculators",
                          br(),
                          
                          column(width = 4,
-                                downloadButton("illustrated_example", "Download Illustrated Example", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+                                downloadButton("illustrated_example", "Download Illustrated Example", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+                                ),
                          
                          br(),
                          br(),
@@ -1607,43 +1610,55 @@ tabItem(tabName = "Calculators",
                          br(),
                          
                          column(width = 4,
-                                downloadButton("testData_calculator", "Download Example Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+                                downloadButton("testData_calculator", "Download Example Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+                                ),
                        
                          br(),
                          br(),
                          br(),
                          
                          # Input: Select a file ---
-                         column(width = 6,
-                         fileInput("alignment_file", "Upload csv File",
-                                   multiple = FALSE,
-                                   accept = c("text/csv",
-                                              "text/comma-separated-values,text/plain",
-                                              ".csv"))), 
+                         column(width = 12,
+                                column(width = 3,
+                                       fileInput("alignment_file", "Upload csv File",
+                                                 multiple = FALSE,
+                                                 accept = c("text/csv",
+                                                            "text/comma-separated-values,text/plain",
+                                                            ".csv"))
+                                       ),
+                                column(width = 9,
+                                       uiOutput("alignment_user_data_check")
+                                       ),
+                                ),
                          br(),
-                         p("Choose the bioaccessibility parameters, and site-specific polydisperse microplastics distributions parameters.")),
                         
                          #ERM Checkbox
                          column(width = 12,
+                                
+                                h3("Bioaccessibility"),
+                                p("Choose the bioaccessibility parameters, and site-specific polydisperse microplastics distributions parameters."),
                                 
                                 # Switch to choose what determines bioaccessibility
                                 column(width = 5,
                                        radioButtons(inputId = "ingestion.translocation.switch_calculator",
                                                     label = "Bioaccessibility limited by tissue translocation (fixed) or mouth size opening (species-dependent)?",
                                                     choices = c("ingestion", "translocation"),
-                                                    selected = "ingestion")),
+                                                    selected = "ingestion")
+                                       ),
                                 
                                 # Tissue translocation size limit (if applicable)
                                 column(width = 4,
                                        numericInput(inputId = "upper.tissue.trans.size.um_calculator",
                                                     label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
-                                                    value = 88))
+                                                    value = 88)
+                                       )
                                 ),
                          
                          column(width = 12,
                                 strong("Starting alpha values are for marine surface water reported in ", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)")),
                                 br(),
-                                br()),
+                                br()
+                                ),
                          
                          #Alpha checkbox
                          column(width = 4,
@@ -1711,18 +1726,25 @@ tabItem(tabName = "Calculators",
                                              value = 5000)),
                          br(),
                          
-                         #Action Buttons
-                         column(width = 4,
-                                actionButton("go_calculator", "Align data", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
-                                              
                          column(width = 12,
-                                  # Show the table with the predictions
-                                  DT::dataTableOutput("alignmentTable")),
-                           
-                           column(width = 4,
-                                  br(),
-                                  downloadButton("downloadData_calculator", "Download Aligned Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
-                           
+                                 column(width = 4,
+                                        radioButtons(inputId = "dose_check_calculator", 
+                                                     label = "Dose Metric:",
+                                                     choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL", 
+                                                                 "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
+                                                     selected = "µg/mL")
+                                        ),
+                                 #Action Buttons
+                                 column(width = 4,
+                                        actionButton("go_calculator", "Align data", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
+                                column(width = 4,
+                                       br(),
+                                       downloadButton("downloadData_calculator", "Download Aligned Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+                                ),
+                         column(width = 12,
+                                # Show the table with the predictions
+                                DT::dataTableOutput("alignmentTable")),
+                         )
                        )#close fluidrow for panel       
               )# closes tabpanel
                          
@@ -8613,10 +8635,37 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   
   ###### Alignment Calculator ######
   
+  #### create test dataset for alignment calculator from aoc_z ###
+  #please keep!
+  # alignment_example_df <- aoc_z %>% 
+  #   select(Group, 
+  #          Species, 
+  #          max.size.ingest.um,
+  #          dose.particles.mL.master,
+  #          polydispersity,
+  #          shape_f,
+  #          density.g.cm3,
+  #          size.length.um.used.for.conversions,
+  #          size.height.um.used.for.conversions,
+  #          size.width.um.used.for.conversions,
+  #          dose.particles.kg.sediment.master, size.length.max.um.used.for.conversions,
+  #          size.length.min.um.used.for.conversions, size.height.min.um.used.for.conversions,
+  #          size.height.max.um.used.for.conversions, size.width.min.um.used.for.conversions,
+  #          size.width.max.um.used.for.conversions, size.length.max.mm.measured, 
+  #          size.length.max.mm.nominal) %>% 
+  #   drop_na(dose.particles.mL.master, Species, polydispersity, density.g.cm3, max.size.ingest.um,
+  #           size.length.um.used.for.conversions, size.height.um.used.for.conversions
+  #           ) %>% 
+  #   filter(shape_f != "Not Reported") %>% 
+  #   sample_n(20)
+  # 
+  # write.csv(alignment_example_df, "calculator/test_data_calculator.csv")
+  
+ 
   # example dataset with minimum columns needed for making alignments
   output$testData_calculator <- downloadHandler(
     filename = function() {
-      paste('example_data-', '.csv', sep='')
+      paste('example_alignment_data', '.csv', sep='')
     },
     content = function(file) {
       write.csv(test_data_calculator, file, row.names = FALSE)
@@ -8633,16 +8682,190 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     }
   )
   
+  ## code to read in alignment calculator dataset and determine if ready
+  output$alignment_user_data_check <- renderUI({
+    req(input$alignment_file)
+    
+    # Read in user dataset
+    raw <- read.csv(input$alignment_file$datapath, stringsAsFactors = TRUE)
+    
+    
+    # Define the mandatory variables and their types
+    mandatory_vars <- list(
+      Group = "character",
+      dose.particles.mL.master = "numeric",
+      max.size.ingest.um = "numeric",
+      polydispersity = "character",
+      size.length.um.used.for.conversions = "numeric",
+      size.height.um.used.for.conversions = "numeric",
+      size.width.um.used.for.conversions = "numeric",
+      shape_f = "character",
+      density.g.cm3 = "numeric"
+    )
+    
+    # Define allowable values for character variables
+    allowable_values <- list(
+      Group = c("Crustacea", "Mollusca", "Annelida", "Algae", "Cnidaria", "Fish", 
+                "Echinoderm", "Mixed", "Bacterium", "Rotifera", "Plant", "Insect", 
+                "Dinoflagellate", "Ciliophora", "Cyanobacteria"),
+      polydispersity = c("monodisperse", "polydisperse"),
+      shape_f = c("Fiber", "Fragment", "Sphere")
+    )
+    
+    # Function to check if all mandatory variables are present and valid
+    check_dataset <- function(data) {
+      issues <- list()
+      
+      # Check for missing mandatory variables
+      missing_vars <- setdiff(names(mandatory_vars), names(data))
+      if (length(missing_vars) > 0) {
+        issues <- c(issues, paste("Missing variables:", paste(missing_vars, collapse = ", ")))
+      }
+      
+      # Check variable types and allowable values for character or factor variables
+      for (var in names(mandatory_vars)) {
+        if (var %in% names(data)) {
+          expected_type <- mandatory_vars[[var]]
+          actual_type <- class(data[[var]])
+          
+          # Allow both character and factor for specific variables
+          if (var %in% names(allowable_values)) {
+            if (!is.character(data[[var]]) && !is.factor(data[[var]])) {
+              issues <- c(issues, paste("Variable", var, "should be a character or factor but is", actual_type))
+            } else {
+              # Convert factor to character for validation
+              unique_values <- unique(as.character(data[[var]]))
+              invalid_values <- setdiff(unique_values, allowable_values[[var]])
+              if (length(invalid_values) > 0) {
+                issues <- c(issues, paste("Variable", var, "has invalid values:", 
+                                          paste(invalid_values, collapse = ", "), 
+                                          ". Valid values are:", 
+                                          paste(allowable_values[[var]], collapse = ", ")))
+              }
+            }
+          } else if (expected_type != "character" && actual_type != expected_type) {
+            issues <- c(issues, paste("Variable", var, "should be", expected_type, "but is", actual_type))
+          }
+        }
+      }
+      
+      # Check specific conditions for "polydisperse" rows
+      if ("polydispersity" %in% names(data) && "polydisperse" %in% unique(as.character(data$polydispersity))) {
+        polydisperse_rows <- data %>% filter(as.character(polydispersity) == "polydisperse")
+        conditional_vars <- c(
+          "size.length.max.um.used.for.conversions",
+          "size.length.min.um.used.for.conversions",
+          "size.height.min.um.used.for.conversions",
+          "size.height.max.um.used.for.conversions",
+          "size.width.min.um.used.for.conversions",
+          "size.width.max.um.used.for.conversions"
+        )
+        
+        for (var in conditional_vars) {
+          if (var %in% names(data)) {
+            # Check missingness only for rows where polydispersity == "polydisperse"
+            if (any(is.na(polydisperse_rows[[var]]))) {
+              issues <- c(issues, paste("Variable", var, "has missing values for rows where 'polydispersity' is 'polydisperse'"))
+            }
+          } else {
+            issues <- c(issues, paste("Variable", var, "is missing but required for rows where 'polydispersity' is 'polydisperse'"))
+          }
+        }
+      }
+      
+      # Return issues
+      return(issues)
+    }
+    
+    # Check the dataset
+    issues <- check_dataset(raw)
+    
+    # Generate UI output
+    if (length(issues) == 0) {
+      # If no issues, display green text
+      HTML("<span style='color: green; font-weight: bold;'>Dataset is good to go!</span>")
+    } else {
+      # If there are issues, display red text with the list of issues
+      issue_text <- paste("<span style='color: red; font-weight: bold;'>Issues found in the dataset:</span><br>",
+                          paste(paste0("- ", issues), collapse = "<br>"))
+      HTML(issue_text)
+    }
+  })
+  
+  
+  
+  #### prep user data for alignment ####
+  alignment_user_data <- reactive({
+    # read in user data
+    raw <- read.csv(input$alignment_file$datapath, stringsAsFactors = TRUE)
+    
+    # List of variables to check
+    vars_to_check <- c("dose.particles.kg.sediment.master", 
+                       "size.length.max.um.used.for.conversions",
+                       "size.length.min.um.used.for.conversions", 
+                       "size.height.min.um.used.for.conversions",
+                       "size.height.max.um.used.for.conversions",
+                       "size.width.min.um.used.for.conversions",
+                       "size.width.max.um.used.for.conversions",
+                       "size.length.max.mm.measured",
+                       "size.length.max.mm.nominal"
+    )
+    
+    # Assuming raw is your DataFrame
+    raw <- alignment_example_df
+    
+    # Create a new DataFrame to store the results
+    alignment_user_data <- raw
+    
+    # Loop through each variable to check
+    for (var in vars_to_check) {
+      if (var %in% names(raw)) {
+        # If the variable exists, keep its original values
+        alignment_user_data[[var]] <- raw[[var]]
+      } else {
+        # If the variable does not exist, create a new column with NA values
+        alignment_user_data[[var]] <- NA_real_
+      }
+    }
+    
+    # Now alignment_user_data contains the original data for existing columns
+    # and NA for those that were not present in the original DataFrame.
+    
+    alignment_user_data
+  })
+  
+  ### make datatable of user data for UI (prior to alignment) ##
+  alignment_user_data_dt <- renderDataTable({
+      req(input$alignment_file)
+    
+    alignment_user_data <- alignment_user_data()
+    
+    datatable(alignment_user_data%>% 
+                mutate_if(is.numeric, ~ signif(., 3)),
+              extensions = c('Buttons'),
+              style = "bootstrap",
+              options = list(
+                dom = 'Brtip',
+                buttons = list(I('colvis'), c('copy', 'csv', 'excel')),
+                scrollY = 400,
+                scrollH = TRUE,
+                sScrollX = TRUE,
+                columnDefs = list(list(width = '50px', targets = "_all"))),#only display the table and nothing else
+              caption = "User Input Data for Alignment") 
+    
+  })
+  
+  
   #align data
   alignedData_calculator <- eventReactive(list(input$go_calculator),{
     
     #require align data button to be pressed to generate table
     req(input$go_calculator)
     
-    #read in user dataset
-    raw <- read.csv(input$alignment_file$datapath, stringsAsFactors = TRUE)
+    # read in prepped user data
+    alignment_user_data <- alignment_user_data()
     
-    ## ERM parametrization ##
+        ## ERM parametrization ##
     # Define params for alignments #
     alpha.input = input$alpha_calculator #length power law exponent
     x2D_set = as.numeric(input$upper_length_calculator) #upper size range (default)
@@ -8651,6 +8874,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     upper.tissue.trans.size.um <- as.numeric(input$upper.tissue.trans.size.um_calculator) #user-defined upper value for tissue trans (numeric)
     ingestion.translocation.switch <- input$ingestion.translocation.switch_calculator #user-defined: inputs are "ingestion" or "translocation"
     ERM.switch <- input$ERM_check_calculator
+    dose_check <- input$dose_check_calculator #options: "Particles/mL", "ug/mL", um3/mL, etc.,
     
     # define parameters for power law coefficients
     a.sa.input = input$a.sa_calculator #1.5 #marine surface area power law
@@ -8664,7 +8888,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     H_W_ratio.input = input$H_W_ratio_calculator # 0.67
     
     # calculate ERM for each species
-    aligned <- raw %>%
+    alignedData_calculator <- alignment_user_data %>%
       #print values used to align
       mutate(alpha = alpha.input,
              x2D_set = x2D_set,
@@ -8680,6 +8904,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              R.ave = R.ave.input,
              H_W_ratio = H_W_ratio.input 
              ) %>% 
+      
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
       mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
@@ -8723,8 +8948,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
       ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
     mutate(size.length.max.um.used.for.conversions = case_when(
-      is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
-      !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000)) %>% 
+      is.na(size.length.max.um.used.for.conversions) & is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
+      is.na(size.length.max.um.used.for.conversions) & !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000,
+      !is.na(size.length.max.um.used.for.conversions) ~ size.length.max.um.used.for.conversions
+      )) %>% 
       # correct for partially translocatable particles
       mutate(CF_bioavailable_trans = case_when(translocatable_poly == "translocatable (some)" ~ CFfnx(a = alpha,
                                                                                                       x1D = size.length.min.um.used.for.conversions,
@@ -8772,10 +8999,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       # Min is always same #
       # calculate size parameters using compartment characteristics
       mutate(size.width.min.um.used.for.conversions = case_when(
-        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
-        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
-        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
-        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+        is.na(size.width.min.um.used.for.conversions) & shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
+        is.na(size.width.min.um.used.for.conversions) & shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
+        is.na(size.width.min.um.used.for.conversions) & shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+        is.na(size.width.min.um.used.for.conversions) & shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+        T ~ size.width.min.um.used.for.conversions
+        )) %>% 
       ### Max depends on ingest/trans limits ###
       # TRANS #
       mutate(size.width.max.um.trans = case_when(
@@ -8795,14 +9024,16 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     ## Monodisperse ##
     #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
     mutate(size.height.um.used.for.conversions = case_when(
-      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
-      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      is.na(size.height.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+      is.na(size.height.um.used.for.conversions) & shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio, # if not spherical, height = width * H:W ratio
+      T ~ size.height.um.used.for.conversions
     )) %>% 
       ### Polydisperse ##
       ## Min is always same ##
       mutate(size.height.min.um.used.for.conversions = case_when(
-        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
-        shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+        is.na(size.height.min.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
+        is.na(size.height.min.um.used.for.conversions) & shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio, # if not spherical, height = width * H:W ratio
+        T ~ size.height.min.um.used.for.conversions
       )) %>%  # environment AND average height to width ratio (kooi et al 2021)
       # trans #
       mutate(size.height.max.um.trans = case_when(
@@ -9085,7 +9316,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                       "Specific Surface Area Aligned Exposure Concentration (particles/mL)") 
   
     #print
-  aligned
+    alignedData_calculator
     
   })
   
@@ -9093,7 +9324,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   output$alignmentTable = DT::renderDataTable({
     req(input$alignment_file)
     
-    datatable(alignedData_calculator() %>%  mutate_if(is.numeric, ~ signif(., 3)),
+    alignedData_calculator <- alignedData_calculator()
+    
+    datatable(alignedData_calculator %>% 
+                mutate_if(is.numeric, ~ signif(., 3)),
     extensions = c('Buttons'),
     style = "bootstrap",
     options = list(
