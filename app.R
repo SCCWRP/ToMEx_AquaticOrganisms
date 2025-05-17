@@ -894,7 +894,11 @@ tabItem(tabName = "Exploration",
                       column(width = 5,
                              radioButtons(inputId = "ingestion.translocation.switch",
                                           label = "Bioaccessibility limited by tissue translocation (fixed) or mouth size opening (species-dependent)?",
-                                          choices = c("ingestion", "translocation"),
+                                          choices = list(
+                                            "Restricted by ingestion (species-specific)" = "ingestion",
+                                            "Restricted by translocation (user-set value or max size ingest- whichever is smaller)" = "translocation"#,
+                                          #  "No restriction for bioaccessibility" = "none"
+                                          ),
                                           selected = "ingestion"
                                           )),
                       
@@ -1288,7 +1292,11 @@ tabItem(tabName = "SSD",
                           column(width = 5,
                                  radioButtons(inputId = "ingestion.translocation.switch_ssd",
                                               label = "Bioaccessibility limited by tissue translocation (fixed) or mouth size opening (species-dependent)?",
-                                              choices = c("ingestion", "translocation"),
+                                              choices = list(
+                                                "Restricted by ingestion (species-specific)" = "ingestion",
+                                                "Restricted by translocation (user-set value or max size ingest- whichever is smaller)" = "translocation"#,
+                                                #"No restriction for bioaccessibility" = "none"
+                                              ),
                                               selected = "ingestion")),
                           
                           # Tissue translocation size limit (if applicable)
@@ -1646,7 +1654,11 @@ tabItem(tabName = "Calculators",
                                 column(width = 5,
                                        radioButtons(inputId = "ingestion.translocation.switch_calculator",
                                                     label = "Bioaccessibility limited by tissue translocation (fixed) or mouth size opening (species-dependent)?",
-                                                    choices = c("ingestion", "translocation"),
+                                                    choices = list(
+                                                      "Restricted by ingestion (species-specific)" = "ingestion",
+                                                      "Restricted by translocation (user-set value or max size ingest- whichever is smaller)" = "translocation"#,
+                                                     # "No restriction for bioaccessibility" = "none"
+                                                    ),
                                                     selected = "ingestion")
                                        ),
                                 
@@ -1659,8 +1671,13 @@ tabItem(tabName = "Calculators",
                                 ),
                          
                          column(width = 12,
-                                strong("Starting alpha values are for marine surface water reported in ", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)")),
+                                strong("Environmental parameters below are reported in ", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)")),
                                 br(),
+                                p("Easily change params here, or customize below:"),
+                                radioButtons(inputId = "alpha.value.matrix_calculator",
+                                             label = "Alpha Values by Environmental Compartment:",
+                                             choices = c("Marine Surface Water", "Freshwater Surface Water", "Marine Sediment", "Freshwater Sediment"),
+                                             selected = "Marine Surface Water"),
                                 br()
                                 ),
                          
@@ -2625,7 +2642,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     x1D_set <- input$lower_length #lower size range (default - user defined)
     x1M_set <- input$lower_length #lower size range for ingestible plastic (user defined)
     upper.tissue.trans.size.um <- as.numeric(input$upper.tissue.trans.size.um) #user-defined upper value for tissue trans (numeric)
-    ingestion.translocation.switch <- input$ingestion.translocation.switch #user-defined: inputs are "ingestion" or "translocation"
+    ingestion.translocation.switch <- input$ingestion.translocation.switch #user-defined: inputs are "ingestion","translocation", or "none
     
     
     # define parameters for power law coefficients
@@ -2670,7 +2687,9 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       #define which bioaccessibility limit to use for calculations based on user input
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
       mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
-                             ingestion.translocation == "translocation" ~ x2M_trans)) %>% 
+                             ingestion.translocation == "translocation" ~ x2M_trans,
+                             ingestion.translocation == "none" ~ x2D_set,
+                             )) %>% 
       ###############################################################################
     ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
     ######################################################################################
@@ -2727,6 +2746,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
                                                   T ~ dose.particles.kg.sediment.master)
       ) %>% 
+      # correct for particles when no bioavailability filter selected by user
+      mutate(CF = CFfnx(a = alpha,
+                        x1D = size.length.min.um.used.for.conversions,
+                        x2D = x2M,
+                        x1M = size.length.min.um.used.for.conversions,
+                        x2M = size.length.max.um.used.for.conversions)) %>%
+      mutate(dose.particles.mL.no_filter = CF * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF * dose.particles.kg.sediment.master) %>% 
       ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     ## calculate size parameters using compartment characteristics
     ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
@@ -2784,6 +2811,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
         T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
       )) %>% 
+      # No bioavailability #
+      mutate(size.width.max.um.used.for.conversions = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      
       ###### ------ HEIGHT ----- ##### 
     ## Monodisperse ##
     #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
@@ -2807,6 +2842,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
       )) %>% 
+      # No bioavailability #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+      
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     #### Monodisperse ##
@@ -2834,6 +2875,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                         length = size.length.max.um.ingest,
                                                         width = size.width.max.um.ingest, 
                                                         height = size.height.max.um.ingest)) %>% 
+      ### No Filter ###
+      # calculate max volume when polydisperse particles are used (no bioavility fildter)
+      mutate(particle.volume.um3.max.none = volumefnx(R = R.ave,
+                                                      length = size.length.max.um.used.for.conversions,
+                                                      width = size.width.max.um.used.for.conversions, 
+                                                      height = size.height.max.um.used.for.conversions)) %>% 
       ############ ------ Surface Area ------ ##########
     # calculate surface are for monodisperse particles
     mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
@@ -2859,6 +2906,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                               length = size.length.max.um.ingest,
                                                               width = size.width.max.um.ingest, 
                                                               height = size.height.max.um.ingest)) %>% 
+      ### No bioavailbility filter ### 
+      mutate(particle.surface.area.um2.max.none = volumefnx(R = R.ave,
+                                                            length = size.length.max.um.used.for.conversions,
+                                                            width = size.width.max.um.used.for.conversions, 
+                                                            height = size.height.max.um.used.for.conversions)) %>% 
       #calculate mass for monodisperse particles  
       mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3    
       #calculate minimum and maximum mass or polydisperse particles
@@ -2867,6 +2919,8 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(mass.per.particle.mg.max.trans = massfnx(v = particle.volume.um3.max.trans, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       # Ingest
       mutate(mass.per.particle.mg.max.ingest = massfnx(v = particle.volume.um3.max.ingest, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # none
+      mutate(mass.per.particle.mg.max.none = massfnx(v = particle.volume.um3.max.none, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       
       ###### Alignments #2 #####
     # Particle ERM #
@@ -2897,7 +2951,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ingestion.translocation.switch == "translocation" & dose_check == "mg/kg sediment" ~ dose.particles.kg.trans,
       ingestion.translocation.switch == "translocation" & dose_check == "µm3/kg sediment" ~ dose.particles.kg.trans,
       ingestion.translocation.switch == "translocation" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.trans,
-      ingestion.translocation.switch == "translocation" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.trans
+      ingestion.translocation.switch == "translocation" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.trans,
+      ##### Now for no bioavaialble filter ####
+      #Water-based concentrations
+      ingestion.translocation.switch == "none" & dose_check == "Particles/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µg/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm3/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/µg/mL" ~ dose.particles.mL.no_filter,
+      #Sediment-based concentrations
+      ingestion.translocation.switch == "none" & dose_check == "Particles/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "mg/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm3/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.no_filter
     )) %>%
       #  ensure algae never considered for food dilution
       mutate(EC_mono_p.particles.mL = case_when(
@@ -2935,7 +3002,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = particle.surface.area.um2.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.sa, 
                                                                                                         x_LL = particle.surface.area.um2.min,
-                                                                                                        x_UL = particle.surface.area.um2.max.ingest)
+                                                                                                        x_UL = particle.surface.area.um2.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                   x_LL = particle.surface.area.um2.min,
+                                                                                                   x_UL = particle.surface.area.um2.max.none)
       )) %>% 
       #calculate polydisperse effect concentration for surface area (particles/mL)
       mutate(EC_poly_sa.particles.mL = (EC_mono_p.particles.mL * mu.sa.mono)/mu.sa.poly) %>%  
@@ -2966,7 +3036,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = particle.volume.um3.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.v, 
                                                                                                         x_LL = particle.volume.um3.min,
-                                                                                                        x_UL = particle.volume.um3.max.ingest)
+                                                                                                        x_UL = particle.volume.um3.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                   x_LL = particle.volume.um3.min,
+                                                                                                   x_UL = particle.volume.um3.max.none)
       )) %>% 
       
       #calculate polydisperse effect concentration for volume (particles/mL)
@@ -2991,7 +3064,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = mass.per.particle.mg.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.m, 
                                                                                                         x_LL = mass.per.particle.mg.min,
-                                                                                                        x_UL = mass.per.particle.mg.max.ingest)
+                                                                                                        x_UL = mass.per.particle.mg.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.none)
       )) %>% 
       #calculate polydisperse effect concentration for volume (particles/mL)
       mutate(EC_poly_m.particles.mL = (EC_env_p.particles.mL * mu.m.mono)/mu.m.poly) %>%
@@ -4000,8 +4077,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     filter(tier_zero_tech_f %in% tech_tier_zero_c) %>%  #technical quality
     filter(tier_zero_risk_f %in% risk_tier_zero_c)  %>%  #risk assessment quality
     filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
-                      ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
-    # remove invalid data
+                     ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M),#if ingestion-limited, don't use data outside upper default size range
+                     ingestion.translocation.switch == "none" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set) #if none selected, don't filter
+                     )) %>%
+   # remove invalid data
         filter(dose_new > 0) %>% 
     drop_na(dose_new)
       #filter(size.length.um.used.for.conversions <= range_n) #For size slider widget - currently commented out
@@ -4874,7 +4953,88 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       #define which bioaccessibility limit to use for calculations based on user input
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
       mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
-                             ingestion.translocation == "translocation" ~ x2M_trans)) %>% 
+                             ingestion.translocation == "translocation" ~ x2M_trans,
+                             ingestion.translocation == "none" ~ x2D_set)) %>% 
+      #calculate CF_bio for all conversions
+      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
+        ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    ## calculate size parameters using compartment characteristics
+    ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
+    ##### ----- LENGTH ------ ###
+    # no need to correct monodisperse. Min for polydispserse remains same #
+    ## polydisperse ##
+    mutate(size.length.max.um.trans = case_when(translocatable_poly == "translocatable (some)" ~ x2M_trans,
+                                                T ~ size.length.max.um.used.for.conversions),
+           size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
+                                                 T ~ size.length.max.um.used.for.conversions)) %>% 
+      ##### ----- WIDTH ------ ###
+      ## Monodisperse ##
+      mutate(size.width.um.used.for.conversions = case_when(
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        is.na(size.width.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # W = L for spheres
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
+        T ~ size.width.um.used.for.conversions # if available, use as-is
+      )) %>% 
+      ### Polydisperse ###
+      # Min is always same #
+      # calculate size parameters using compartment characteristics
+      mutate(size.width.min.um.used.for.conversions = case_when(
+        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
+        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
+        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+      ### Max depends on ingest/trans limits ###
+      # TRANS #
+      mutate(size.width.max.um.trans = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # INGEST #
+      mutate(size.width.max.um.ingest = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # No bioavailability #
+      mutate(size.width.max.um.used.for.conversions = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      
+      ###### ------ HEIGHT ----- ##### 
+    ## Monodisperse ##
+    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+    mutate(size.height.um.used.for.conversions = case_when(
+      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+    )) %>% 
+      ### Polydisperse ##
+      ## Min is always same ##
+      mutate(size.height.min.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%  # environment AND average height to width ratio (kooi et al 2021)
+      # trans #
+      mutate(size.height.max.um.trans = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # Ingest # 
+      mutate(size.height.max.um.ingest = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # No bioavailability #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
       ###############################################################################
     ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
     ######################################################################################
@@ -4931,71 +5091,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
                                                   T ~ dose.particles.kg.sediment.master)
       ) %>% 
-      ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
-    ## calculate size parameters using compartment characteristics
-    ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
-    ##### ----- LENGTH ------ ###
-    # no need to correct monodisperse. Min for polydispserse remains same #
-    ## polydisperse ##
-    mutate(size.length.max.um.trans = case_when(translocatable_poly == "translocatable (some)" ~ x2M_trans,
-                                                T ~ size.length.max.um.used.for.conversions),
-           size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
-                                                 T ~ size.length.max.um.used.for.conversions)) %>% 
-      ##### ----- WIDTH ------ ###
-      ## Monodisperse ##
-      mutate(size.width.um.used.for.conversions = case_when(
-        is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        is.na(size.width.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # W = L for spheres
-        is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
-        is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
-        T ~ size.width.um.used.for.conversions # if available, use as-is
-      )) %>% 
-      ### Polydisperse ###
-      # Min is always same #
-      # calculate size parameters using compartment characteristics
-      mutate(size.width.min.um.used.for.conversions = case_when(
-        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
-        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
-        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
-        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
-      ### Max depends on ingest/trans limits ###
-      # TRANS #
-      mutate(size.width.max.um.trans = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
-      # INGEST #
-      mutate(size.width.max.um.ingest = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
-      ###### ------ HEIGHT ----- ##### 
-    ## Monodisperse ##
-    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
-    mutate(size.height.um.used.for.conversions = case_when(
-      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
-      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
-    )) %>% 
-      ### Polydisperse ##
-      ## Min is always same ##
-      mutate(size.height.min.um.used.for.conversions = case_when(
-        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
-        shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>%  # environment AND average height to width ratio (kooi et al 2021)
-      # trans #
-      mutate(size.height.max.um.trans = case_when(
-        shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
-        shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # Ingest # 
-      mutate(size.height.max.um.ingest = case_when(
-        shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
-        shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
+      # correct for particles when no bioavailability filter selected by user
+      mutate(dose.particles.mL.no_filter = CF_bio * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF_bio * dose.particles.kg.sediment.master) %>% 
+    
+      
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     #### Monodisperse ##
@@ -5023,6 +5123,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                         length = size.length.max.um.ingest,
                                                         width = size.width.max.um.ingest, 
                                                         height = size.height.max.um.ingest)) %>% 
+      ### No Filter ###
+      # calculate max volume when polydisperse particles are used (no bioavility fildter)
+      mutate(particle.volume.um3.max.none = volumefnx(R = R.ave,
+                                                      length = size.length.max.um.used.for.conversions,
+                                                      width = size.width.max.um.used.for.conversions, 
+                                                      height = size.height.max.um.used.for.conversions)) %>% 
       ############ ------ Surface Area ------ ##########
     # calculate surface are for monodisperse particles
     mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
@@ -5048,6 +5154,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                               length = size.length.max.um.ingest,
                                                               width = size.width.max.um.ingest, 
                                                               height = size.height.max.um.ingest)) %>% 
+      ### No bioavailbility filter ### 
+      mutate(particle.surface.area.um2.max.none = volumefnx(R = R.ave,
+                                                            length = size.length.max.um.used.for.conversions,
+                                                            width = size.width.max.um.used.for.conversions, 
+                                                            height = size.height.max.um.used.for.conversions)) %>% 
       #calculate mass for monodisperse particles  
       mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3    
       #calculate minimum and maximum mass or polydisperse particles
@@ -5056,6 +5167,8 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(mass.per.particle.mg.max.trans = massfnx(v = particle.volume.um3.max.trans, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       # Ingest
       mutate(mass.per.particle.mg.max.ingest = massfnx(v = particle.volume.um3.max.ingest, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # none
+      mutate(mass.per.particle.mg.max.none = massfnx(v = particle.volume.um3.max.none, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       
       ###### Alignments #2 #####
     # Particle ERM #
@@ -5086,7 +5199,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ingestion.translocation.switch == "translocation" & dose_check == "mg/kg sediment" ~ dose.particles.kg.trans,
       ingestion.translocation.switch == "translocation" & dose_check == "µm3/kg sediment" ~ dose.particles.kg.trans,
       ingestion.translocation.switch == "translocation" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.trans,
-      ingestion.translocation.switch == "translocation" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.trans
+      ingestion.translocation.switch == "translocation" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.trans,
+      ##### Now for no bioavaialble filter ####
+      #Water-based concentrations
+      ingestion.translocation.switch == "none" & dose_check == "Particles/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µg/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm3/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/µg/mL" ~ dose.particles.mL.no_filter,
+      #Sediment-based concentrations
+      ingestion.translocation.switch == "none" & dose_check == "Particles/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "mg/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm3/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.no_filter
     )) %>%
       #  ensure algae never considered for food dilution
       mutate(EC_mono_p.particles.mL = case_when(
@@ -5096,8 +5222,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
       mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
-      #calculate CF_bio for all conversions
-      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
       ## Calculate environmentally relevant effect threshold for particles
       mutate(EC_env_p.particles.mL = EC_poly_p.particles.mL * CF_bio) %>%  #aligned particle effect concentraiton (1-5000 um)
       
@@ -5124,7 +5248,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = particle.surface.area.um2.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.sa, 
                                                                                                         x_LL = particle.surface.area.um2.min,
-                                                                                                        x_UL = particle.surface.area.um2.max.ingest)
+                                                                                                        x_UL = particle.surface.area.um2.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                   x_LL = particle.surface.area.um2.min,
+                                                                                                   x_UL = particle.surface.area.um2.max.none)
       )) %>% 
       #calculate polydisperse effect concentration for surface area (particles/mL)
       mutate(EC_poly_sa.particles.mL = (EC_mono_p.particles.mL * mu.sa.mono)/mu.sa.poly) %>%  
@@ -5155,7 +5282,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = particle.volume.um3.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.v, 
                                                                                                         x_LL = particle.volume.um3.min,
-                                                                                                        x_UL = particle.volume.um3.max.ingest)
+                                                                                                        x_UL = particle.volume.um3.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                   x_LL = particle.volume.um3.min,
+                                                                                                   x_UL = particle.volume.um3.max.none)
       )) %>% 
       
       #calculate polydisperse effect concentration for volume (particles/mL)
@@ -5180,7 +5310,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = mass.per.particle.mg.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.m, 
                                                                                                         x_LL = mass.per.particle.mg.min,
-                                                                                                        x_UL = mass.per.particle.mg.max.ingest)
+                                                                                                        x_UL = mass.per.particle.mg.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.none)
       )) %>% 
       #calculate polydisperse effect concentration for volume (particles/mL)
       mutate(EC_poly_m.particles.mL = (EC_env_p.particles.mL * mu.m.mono)/mu.m.poly) %>%
@@ -5256,7 +5390,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
       # specific surface area to specific surface area #
       mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
-    
+   
    
     ###### Water Radio Button Alignments ######
     # Unaligned #
@@ -6201,9 +6335,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       dplyr::filter(acute.chronic_f %in% acute.chronic.c_ssd) %>%  #acute chronic filter
       dplyr::filter(risk.13 != 0) %>%  #Drop studies that received a score of 0 for endpoints criteria (this also drops studies that have not yet been scored) - KEEP THIS AFTER THE RED CRITERIA FILTERS  
       dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
-                       ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
+                              ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M),  #if ingestion-limited, don't use data outside upper default size range
+                              ingestion.translocation.switch == "none" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set)   #if none selected, don't filter
+      )) %>%  #if ingestion-limited, don't use data outside upper default size range
       dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  translocatable != "not translocatable", #if tissue-trans limited, don't use data with non-translocatable particles
-                              ingestion.translocation.switch == "ingestion" ~  ingestible != "not ingestible")) %>%  #if ingestion-limited, don't use data outside upper default size range)
+                              ingestion.translocation.switch == "ingestion" ~  ingestible != "not ingestible",#if ingestion-limited, don't use data outside upper default size range)
+                              ingestion.translocation.switch == "none" ~ ingestible %in% c("ingestible", "not ingestible") # don't filter if no bioavail filter selected
+      ))  %>%  
       group_by(Species) %>% 
       drop_na(dose_new)# %>% 
       # make sure we're not using a multiplicity of doses that are identical
@@ -6281,6 +6419,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              p.ave = p.ave.input,
              H_W_ratio = H_W_ratio.input
       ) %>% 
+      
       ### BIOACCESSIBILITY ###
       # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
       mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
@@ -6293,7 +6432,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       #define which bioaccessibility limit to use for calculations based on user input
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
       mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
-                             ingestion.translocation == "translocation" ~ x2M_trans)) %>% 
+                             ingestion.translocation == "translocation" ~ x2M_trans,
+                             ingestion.translocation == "none" ~ x2D_set)) %>% 
+      # CF Bio #
+      #calculate CF_bio for all conversions
+      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
       ###############################################################################
     ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
     ######################################################################################
@@ -6350,7 +6493,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
                                                   T ~ dose.particles.kg.sediment.master)
              ) %>% 
-      ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+      # correct for particles when no bioavailability filter selected by user
+      mutate(dose.particles.mL.no_filter = CF_bio * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF_bio * dose.particles.kg.sediment.master) %>% 
+          ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     ## calculate size parameters using compartment characteristics
     ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
     ##### ----- LENGTH ------ ###
@@ -6391,6 +6537,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
         shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
         T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>%
+      # No bioavailability #
+      mutate(size.width.max.um.used.for.conversions = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
       )) %>% 
       ###### ------ HEIGHT ----- ##### 
     ## Monodisperse ##
@@ -6414,6 +6567,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(size.height.max.um.ingest = case_when(
         shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # No bioavailability #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
       )) %>% 
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
@@ -6442,6 +6600,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                         length = size.length.max.um.ingest,
                                                         width = size.width.max.um.ingest, 
                                                         height = size.height.max.um.ingest)) %>% 
+      ### No Filter ###
+      # calculate max volume when polydisperse particles are used (no bioavility fildter)
+      mutate(particle.volume.um3.max.none = volumefnx(R = R.ave,
+                                                      length = size.length.max.um.used.for.conversions,
+                                                      width = size.width.max.um.used.for.conversions, 
+                                                      height = size.height.max.um.used.for.conversions)) %>% 
       ############ ------ Surface Area ------ ##########
     # calculate surface are for monodisperse particles
     mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
@@ -6467,6 +6631,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                               length = size.length.max.um.ingest,
                                                               width = size.width.max.um.ingest, 
                                                               height = size.height.max.um.ingest)) %>% 
+      ### No bioavailbility filter ### 
+      mutate(particle.surface.area.um2.max.none = volumefnx(R = R.ave,
+                                                            length = size.length.max.um.used.for.conversions,
+                                                            width = size.width.max.um.used.for.conversions, 
+                                                            height = size.height.max.um.used.for.conversions)) %>% 
       #calculate mass for monodisperse particles  
       mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3    
       #calculate minimum and maximum mass or polydisperse particles
@@ -6475,6 +6644,8 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(mass.per.particle.mg.max.trans = massfnx(v = particle.volume.um3.max.trans, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       # Ingest
       mutate(mass.per.particle.mg.max.ingest = massfnx(v = particle.volume.um3.max.ingest, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # none
+      mutate(mass.per.particle.mg.max.none = massfnx(v = particle.volume.um3.max.none, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       
   ###### Alignments #2 #####
       # Particle ERM #
@@ -6505,9 +6676,22 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ingestion.translocation.switch == "translocation" & dose_check == "mg/kg sediment" ~ dose.particles.kg.trans,
       ingestion.translocation.switch == "translocation" & dose_check == "µm3/kg sediment" ~ dose.particles.kg.trans,
       ingestion.translocation.switch == "translocation" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.trans,
-      ingestion.translocation.switch == "translocation" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.trans
+      ingestion.translocation.switch == "translocation" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.trans,
+      ##### Now for no bioavaialble filter ####
+      #Water-based concentrations
+      ingestion.translocation.switch == "none" & dose_check == "Particles/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µg/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm3/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/µg/mL" ~ dose.particles.mL.no_filter,
+      #Sediment-based concentrations
+      ingestion.translocation.switch == "none" & dose_check == "Particles/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "mg/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm3/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.no_filter
       )) %>%
-    #  ensure algae never considered for food dilution
+       #  ensure algae never considered for food dilution
       mutate(EC_mono_p.particles.mL = case_when(
         ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
         T ~ EC_mono_p.particles.mL)) %>%
@@ -6515,8 +6699,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
       mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
-      #calculate CF_bio for all conversions
-      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
       ## Calculate environmentally relevant effect threshold for particles
       mutate(EC_env_p.particles.mL = EC_poly_p.particles.mL * CF_bio) %>%  #aligned particle effect concentraiton (1-5000 um)
       
@@ -6543,7 +6725,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                                 x_UL = particle.surface.area.um2.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.sa, 
                                                                                                                 x_LL = particle.surface.area.um2.min,
-                                                                                                                x_UL = particle.surface.area.um2.max.ingest)
+                                                                                                                x_UL = particle.surface.area.um2.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                   x_LL = particle.surface.area.um2.min,
+                                                                                                   x_UL = particle.surface.area.um2.max.none)
         )) %>% 
       #calculate polydisperse effect concentration for surface area (particles/mL)
       mutate(EC_poly_sa.particles.mL = (EC_mono_p.particles.mL * mu.sa.mono)/mu.sa.poly) %>%  
@@ -6574,7 +6759,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = particle.volume.um3.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.v, 
                                                                                                         x_LL = particle.volume.um3.min,
-                                                                                                        x_UL = particle.volume.um3.max.ingest)
+                                                                                                        x_UL = particle.volume.um3.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                   x_LL = particle.volume.um3.min,
+                                                                                                   x_UL = particle.volume.um3.max.none)
         )) %>% 
       
       #calculate polydisperse effect concentration for volume (particles/mL)
@@ -6599,7 +6787,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                                 x_UL = mass.per.particle.mg.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.m, 
                                                                                                             x_LL = mass.per.particle.mg.min,
-                                                                                                            x_UL = mass.per.particle.mg.max.ingest)
+                                                                                                            x_UL = mass.per.particle.mg.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.none)
         )) %>% 
       #calculate polydisperse effect concentration for volume (particles/mL)
       mutate(EC_poly_m.particles.mL = (EC_env_p.particles.mL * mu.m.mono)/mu.m.poly) %>%
@@ -7612,11 +7804,15 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       dplyr::filter(tier_zero_risk_f %in% risk_tier_zero_c_ssd) %>%  #risk assessment quality
       dplyr::filter(risk.13 != 0) %>%  #Drop studies that received a score of 0 for endpoints criteria (this also drops studies that have not yet been scored) - KEEP THIS AFTER THE RED CRITERIA FILTERS  
       dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
-                              ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M))) %>%  #if ingestion-limited, don't use data outside upper default size range
+                              ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M),  #if ingestion-limited, don't use data outside upper default size range
+                              ingestion.translocation.switch == "none" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set)   #if none selected, don't filter
+                              )) %>%  #if ingestion-limited, don't use data outside upper default size range
       dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  translocatable != "not translocatable", #if tissue-trans limited, don't use data with non-translocatable particles
-                              ingestion.translocation.switch == "ingestion" ~  ingestible != "not ingestible")) %>%  #if ingestion-limited, don't use data outside upper default size range)
-      drop_na(dose_new) %>%  #must drop NAs or else nothing will work
-      filter(dose_new > 0) %>% 
+                              ingestion.translocation.switch == "ingestion" ~  ingestible != "not ingestible",#if ingestion-limited, don't use data outside upper default size range)
+                              ingestion.translocation.switch == "none" ~ ingestible %in% c("ingestible", "not ingestible") # don't filter if no bioavail filter selected
+                              ))  %>%  
+       drop_na(dose_new) %>%  #must drop NAs or else nothing will work
+       filter(dose_new > 0) %>% 
       # make sure we're not using a multiplicity of doses that are identical
       #      distinct(Species, doi, dose.particles.mL.master, poly_f, shape_f, .keep_all = T) %>% ## not applying this, as was not included in original framework
       group_by(Species, Group) %>%
@@ -8637,7 +8833,119 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     }
   )
   
+  #########################
   ###### Alignment Calculator ######
+  ###############################
+  ###### Alpha Value Radio Buttons ######
+  observeEvent(input$alpha.value.matrix_calculator,{
+    
+    if(input$alpha.value.matrix_calculator == "Marine Surface Water"){
+      updateNumericInput(inputId = "alpha_calculator",
+                         value = 2.07)
+      
+      updateNumericInput(inputId = "a.sa_calculator",
+                         value = 1.50)
+      
+      updateNumericInput(inputId = "a.v_calculator",
+                         value = 1.48)
+      
+      updateNumericInput(inputId = "a.m_calculator",
+                         value = 1.32)
+      
+      updateNumericInput(inputId = "a.ssa_calculator",
+                         value = 1.98)
+      
+      updateNumericInput(inputId = "R.ave_calculator",
+                         value = 0.77)
+      
+      updateNumericInput(inputId = "H_W_ratio_calculator",
+                         value = 0.77)
+      
+      updateNumericInput(inputId = "p.ave_calculator",
+                         value = 1.10)
+      
+    }
+    
+    if(input$alpha.value.matrix_calculator == "Freshwater Surface Water"){
+      updateNumericInput(inputId = "alpha_calculator",
+                         value = 2.64)
+      
+      updateNumericInput(inputId = "a.sa_calculator",
+                         value = 2.00)
+      
+      updateNumericInput(inputId = "a.v_calculator",
+                         value = 1.68)
+      
+      updateNumericInput(inputId = "a.m_calculator",
+                         value = 1.65)
+      
+      updateNumericInput(inputId = "a.ssa_calculator",
+                         value = 2.71)
+      
+      updateNumericInput(inputId = "R.ave_calculator",
+                         value = 0.67)
+      
+      updateNumericInput(inputId = "H_W_ratio_calculator",
+                         value = 0.67)
+      
+      updateNumericInput(inputId = "p.ave_calculator",
+                         value = 1.04)
+    }
+    
+    if(input$alpha.value.matrix_calculator == "Marine Sediment"){
+      updateNumericInput(inputId = "alpha_calculator",
+                         value = 2.57)
+      
+      updateNumericInput(inputId = "a.sa_calculator",
+                         value = 1.75)
+      
+      updateNumericInput(inputId = "a.v_calculator",
+                         value = 1.50)
+      
+      updateNumericInput(inputId = "a.m_calculator",
+                         value = 1.50)
+      
+      updateNumericInput(inputId = "a.ssa_calculator",
+                         value = 2.54)
+      
+      updateNumericInput(inputId = "R.ave_calculator",
+                         value = 0.75)
+      
+      updateNumericInput(inputId = "H_W_ratio_calculator",
+                         value = 0.75)
+      
+      updateNumericInput(inputId = "p.ave_calculator",
+                         value = 1.16)
+    }
+    
+    if(input$alpha.value.matrix_calculator == "Freshwater Sediment"){
+      updateNumericInput(inputId = "alpha_calculator",
+                         value = 3.25)
+      
+      updateNumericInput(inputId = "a.sa_calculator",
+                         value = 1.89)
+      
+      updateNumericInput(inputId = "a.v_calculator",
+                         value = 1.53)
+      
+      updateNumericInput(inputId = "a.m_calculator",
+                         value = 1.56)
+      
+      updateNumericInput(inputId = "a.ssa_calculator",
+                         value = 2.82)
+      
+      updateNumericInput(inputId = "R.ave_calculator",
+                         value = 0.70)
+      
+      updateNumericInput(inputId = "H_W_ratio_calculator",
+                         value = 0.70)
+      
+      updateNumericInput(inputId = "p.ave_calculator",
+                         value = 1.15)
+    }
+    
+  })
+  
   
   #### create test dataset for alignment calculator from aoc_z ###
   #please keep!
@@ -8921,7 +9229,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       #define which bioaccessibility limit to use for calculations based on user input
       mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
       mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
-                             ingestion.translocation == "translocation" ~ x2M_trans)) %>% 
+                             ingestion.translocation == "translocation" ~ x2M_trans,
+                             ingestion.translocation == "none" ~ x2D_set)) %>% 
+      #calculate CF_bio for all conversions
+      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
       ###############################################################################
     ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
     ######################################################################################
@@ -8980,6 +9291,9 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
                                                   T ~ dose.particles.kg.sediment.master)
       ) %>% 
+      # correct for particles when no bioavailability filter selected by user
+      mutate(dose.particles.mL.no_filter = CF_bio * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF_bio * dose.particles.kg.sediment.master) %>% 
       ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     ## calculate size parameters using compartment characteristics
     ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
@@ -9024,6 +9338,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
         T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
       )) %>% 
+      # No bioavailability #
+      mutate(size.width.max.um.used.for.conversions = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      
       ###### ------ HEIGHT ----- ##### 
     ## Monodisperse ##
     #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
@@ -9049,6 +9371,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
       )) %>% 
+      # No bioavailability #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+      
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     #### Monodisperse ##
@@ -9076,6 +9404,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                         length = size.length.max.um.ingest,
                                                         width = size.width.max.um.ingest, 
                                                         height = size.height.max.um.ingest)) %>% 
+      ### No Filter ###
+      # calculate max volume when polydisperse particles are used (no bioavility fildter)
+      mutate(particle.volume.um3.max.none = volumefnx(R = R.ave,
+                                                        length = size.length.max.um.used.for.conversions,
+                                                        width = size.width.max.um.used.for.conversions, 
+                                                        height = size.height.max.um.used.for.conversions)) %>% 
       ############ ------ Surface Area ------ ##########
     # calculate surface are for monodisperse particles
     mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
@@ -9101,6 +9435,11 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                               length = size.length.max.um.ingest,
                                                               width = size.width.max.um.ingest, 
                                                               height = size.height.max.um.ingest)) %>% 
+      ### No bioavailbility filter ### 
+      mutate(particle.surface.area.um2.max.none = volumefnx(R = R.ave,
+                                                              length = size.length.max.um.used.for.conversions,
+                                                              width = size.width.max.um.used.for.conversions, 
+                                                              height = size.height.max.um.used.for.conversions)) %>% 
       #calculate mass for monodisperse particles  
       mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3    
       #calculate minimum and maximum mass or polydisperse particles
@@ -9109,6 +9448,8 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(mass.per.particle.mg.max.trans = massfnx(v = particle.volume.um3.max.trans, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       # Ingest
       mutate(mass.per.particle.mg.max.ingest = massfnx(v = particle.volume.um3.max.ingest, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # none
+      mutate(mass.per.particle.mg.max.none = massfnx(v = particle.volume.um3.max.none, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
       
       ###### Alignments #2 #####
     # Particle ERM #
@@ -9139,7 +9480,20 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ingestion.translocation.switch == "translocation" & dose_check == "mg/kg sediment" ~ dose.particles.kg.trans,
       ingestion.translocation.switch == "translocation" & dose_check == "µm3/kg sediment" ~ dose.particles.kg.trans,
       ingestion.translocation.switch == "translocation" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.trans,
-      ingestion.translocation.switch == "translocation" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.trans
+      ingestion.translocation.switch == "translocation" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.trans,
+      ##### Now for no bioavaialble filter ####
+      #Water-based concentrations
+      ingestion.translocation.switch == "none" & dose_check == "Particles/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µg/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm3/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/mL" ~ dose.particles.mL.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/µg/mL" ~ dose.particles.mL.no_filter,
+      #Sediment-based concentrations
+      ingestion.translocation.switch == "none" & dose_check == "Particles/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "mg/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm3/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.no_filter,
+      ingestion.translocation.switch == "none" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.no_filter
     )) %>%
       #  ensure algae never considered for food dilution
       mutate(EC_mono_p.particles.mL = case_when(
@@ -9149,11 +9503,9 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
       # polydisperse effect threshold for particles
       mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
-      #calculate CF_bio for all conversions
-      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
+  
       ## Calculate environmentally relevant effect threshold for particles
       mutate(EC_env_p.particles.mL = EC_poly_p.particles.mL * CF_bio) %>%  #aligned particle effect concentraiton (1-5000 um)
-      
       # Surface Area ERM #
       ##--- environmental calculations ---###
       #calculate lower ingestible surface area
@@ -9177,8 +9529,12 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = particle.surface.area.um2.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.sa, 
                                                                                                         x_LL = particle.surface.area.um2.min,
-                                                                                                        x_UL = particle.surface.area.um2.max.ingest)
+                                                                                                        x_UL = particle.surface.area.um2.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                        x_LL = particle.surface.area.um2.min,
+                                                                                                        x_UL = particle.surface.area.um2.max.none)
       )) %>% 
+    
       #calculate polydisperse effect concentration for surface area (particles/mL)
       mutate(EC_poly_sa.particles.mL = (EC_mono_p.particles.mL * mu.sa.mono)/mu.sa.poly) %>%  
       #calculate environmentally realistic effect threshold
@@ -9208,13 +9564,16 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                                                                             x_UL = particle.volume.um3.max.trans),
         polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.v, 
                                                                                                         x_LL = particle.volume.um3.min,
-                                                                                                        x_UL = particle.volume.um3.max.ingest)
+                                                                                                        x_UL = particle.volume.um3.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                        x_LL = particle.volume.um3.min,
+                                                                                                        x_UL = particle.volume.um3.max.none)
       )) %>% 
-      
       #calculate polydisperse effect concentration for volume (particles/mL)
       mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
       #calculate environmentally realistic effect threshold
       mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+ 
       # Mass ERM #
       ##--- environmental calculations ---###
       #calculate lower ingestible mass
@@ -9228,13 +9587,19 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       #(note that if mixed particles were used, a different equation must be used)
       mutate(mu.m.mono = case_when(
         polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
-        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.m, 
-                                                                                                            x_LL = mass.per.particle.mg.min,
-                                                                                                            x_UL = mass.per.particle.mg.max.trans),
-        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.m, 
-                                                                                                        x_LL = mass.per.particle.mg.min,
-                                                                                                        x_UL = mass.per.particle.mg.max.ingest)
-      )) %>% 
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~ 
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.none)
+        )) %>% 
       #calculate polydisperse effect concentration for volume (particles/mL)
       mutate(EC_poly_m.particles.mL = (EC_env_p.particles.mL * mu.m.mono)/mu.m.poly) %>%
       #calculate environmentally realistic effect threshold
@@ -9547,6 +9912,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     shinyjs::reset("dose_check_ssd")
     shinyjs::reset("ERM_check_ssd")
     shinyjs::reset("alpha.value.matrix_ssd")
+    shinyjs::reset("alpha.value.matrix_calculator")
     shinyjs::reset("alpha_ssd")
     shinyjs::reset("a.sa_ssd")
     shinyjs::reset("a.v_ssd")
