@@ -38,6 +38,9 @@ library(GeneralizedHyperbolic) ## normal-inverse Gaussian
 library(stats)
 library(caret) # for random forest predictions
 library(randomForest) # for random forest predictions
+library(umap) # For UMAP
+library(uwot) # Alternative UMAP implementation
+library(shinycssloaders) #shows spinner when loading
 
 
 # ensure correct version of ssdtools is installed
@@ -1793,19 +1796,22 @@ tabItem(tabName = "Predictions",
                                 p("This model predicts the ERM-aligned (1- 5,000 um) concentrations that would be expected to produce an effect in a species of interest for a given effect metric (e.g., NOEC, LOEC). The model was trained on quality-controlled effects data in the ToMEx database and utilizes a random forest structure. The model has been optimized to give the most accurate predictions using the fewest number of parameters. For the food dilution ERM, the model R^2 is 0.87, and for the tissue translocation ERM, the model R^22 is 0.82 based on a subset (25%) of the training data. See Coffin et al (in prep) for additional details, and instructions on the formatting of independent variables for uploading. Additional details regarding this methodology, including a walkthrough of how to use this tab are included in", a(href = "https://youtu.be/ymPMYkcmgDg", "Dr. Scott Coffin's SETAC North America 2021 presentation (YouTube link).", .noOWs = "outside"))),
                                 
                                 br(),
-                                
-                                column(width = 4,
-                                       p("Test data may be used as a guide for preparing user data."),
-                                       br(),
-                                       downloadButton("testData_prediction", "Download Test Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
-                                
+                                p("Test data may be used as a guide for preparing user data."),
+                                br(),
+                                downloadButton("testData_prediction", "Download Test Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"),
                                 column(width = 12,
                                        br(),
-                                p("For categorical variables, ensure data are valid values (i.e. levels exist within training dataset). Click below to download a list of valid values for each variable name.")),
-                                       br(),
+                                       p("For categorical variables, ensure data are valid values (i.e. levels exist within training dataset). Click below to download a list of valid values for each variable name.")),
+                                br(),
                                 
                                 column(width = 4,
                                        downloadButton("validValues_prediction", "Download Valid Values", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+                                br(),
+                                br(),
+                                h3("Example data for predictions:"),
+                                column(width = 12,
+                                       DTOutput("test_data_DT")
+                                       )
                               
                               )), #end start tabPanel
                      
@@ -1822,7 +1828,9 @@ tabItem(tabName = "Predictions",
                                           multiple = FALSE,
                                           accept = c("text/csv",
                                                      "text/comma-separated-values,text/plain",
-                                                     ".csv"))
+                                                     ".csv")),
+                                #### renderUI for QC check
+                                uiOutput("validation_results")
                                 )# end column
                               )#end column
                               ), #end fluidRow
@@ -1830,16 +1838,21 @@ tabItem(tabName = "Predictions",
                               fluidRow(column(width = 12,
                                 p("Smoothed histograms of the training dataset are overlaid on the user-uploaded data. As test data diverges in relative abundance from training data, model predictions lower in accuracy."),
                               column(width = 12,
-                                     plotOutput(outputId = "predictionDataSkim"))
+                                     withSpinner(plotOutput(outputId = "predictionDataSkim"))#,
+                                #     withSpinner(plotOutput("umapPlot"))
+                                     )
                               ),
                               column(width = 12,
                                      column(width = 3,
-                                            downloadButton("download_predictionDataSkim", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")))
+                                            downloadButton("download_predictionDataSkim", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))
+                                     ),
+                              # render datatable of user's uploaded dataset
+                              DTOutput("user_prediction_DT")
                               )
                               
                      ), # end upload tabPanel
                      
-                     tabPanel("Model Selection",
+                     tabPanel("Predict effect concentrations",
                               
                               fluidRow(
                               #model select
@@ -1853,12 +1866,8 @@ tabItem(tabName = "Predictions",
                                 #action buttons 
                                 column(width = 4,
                                        br(),
-                                       actionButton("go_predict", "Predict Effect Concentrations", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655"))
-                              )), #closes model selection tabPanel
-                     
-                     tabPanel("Predictions Table",
+                                       actionButton("go_predict", "Predict Effect Concentrations", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
                               
-                              fluidRow(
                                 
                                 column(width = 12,
                                 p("Predicted effect concentrations for the uploaded data can be viewed and downloaded here.")),
@@ -9055,11 +9064,15 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                           paste(allowable_values[[var]], collapse = ", ")))
               }
             }
-          } else if (expected_type != "character" && actual_type != expected_type) {
-            issues <- c(issues, paste("Variable", var, "should be", expected_type, "but is", actual_type))
+          } else if (expected_type == "numeric" && !(actual_type %in% c("numeric", "integer"))) {
+            # Allow both numeric and integer for numeric variables
+            issues <- c(issues, paste("Variable", var, "should be numeric but is", actual_type))
+          } else if (expected_type == "character" && actual_type != "character") {
+            issues <- c(issues, paste("Variable", var, "should be character but is", actual_type))
           }
         }
       }
+      
       
       # Check specific conditions for "polydisperse" rows
       if ("polydispersity" %in% names(data) && "polydisperse" %in% unique(as.character(data$polydispersity))) {
@@ -9122,9 +9135,6 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                        "size.length.max.mm.measured",
                        "size.length.max.mm.nominal"
     )
-    
-    # Assuming raw is your DataFrame
-    raw <- alignment_example_df
     
     # Create a new DataFrame to store the results
     alignment_user_data <- raw
@@ -9735,6 +9745,41 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     }
   )
   
+  # render DT of test data prediction
+  output$test_data_DT <- renderDT(server = TRUE,{
+    
+    datatable(test_data_prediction,
+              rownames = F,
+              extensions = 'Buttons', #enable buttons extension
+              filter = "top",
+              options = list(pageLength = 10, autoWidth = TRUE,  width = '100%', scrollX = TRUE,
+                             dom = 'Blrtip', 
+                             buttons = list(
+                               # insert buttons with copy and print
+                               # colvis includes the button to select and view only certain columns in the output table
+                               # from https://rstudio.github.io/DT/extensions.html 
+                               I('colvis'), 'copy', 'print',
+                               # code for the first dropdown download button. this will download only the current page only (depends on the number of rows selected in the lengthMenu)
+                               # using modifier = list(page = "current")
+                               # only the columns visible will be downloaded using the columns:":visible" option from:
+                               list(extend = 'collection', buttons = list(list(extend = "csv", filename = "page",exportOptions = list(
+                                 columns = ":visible",modifier = list(page = "current"))),
+                                 list(extend = 'excel', filename = "page", title = NULL, 
+                                      exportOptions = list(columns = ":visible",modifier = list(page = "current")))),
+                                 text = 'Download current page'),
+                               # code for the  second dropdown download button
+                               # this will download the entire dataset using modifier = list(page = "all")
+                               list(extend = 'collection',
+                                    buttons = list(list(extend = "csv", filename = "data",exportOptions = list(
+                                      columns = ":visible",modifier = list(page = "all"))),
+                                      list(extend = 'excel', filename = "data", title = NULL, 
+                                           exportOptions = list(columns = ":visible",modifier = list(page = "all")))),
+                                    text = 'Download all data')),
+                             # add the option to display more rows as a length menu
+                             lengthMenu = list(c(10, 30, 50, -1),
+                                               c('10', '30', '50', 'All'))),class = "display")
+  })
+  
   # valid values
   output$validValues_prediction <- downloadHandler(
     filename = function() {
@@ -9745,6 +9790,207 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     }
   )
   
+  #### validate user-uploaded prediction data ###
+  validate_data <- eventReactive(input$prediction_file, {
+    req(input$prediction_file)
+    #read in user data
+    user_data <- readr::read_csv(input$prediction_file$datapath)
+    
+    # Initialize validation messages
+    messages <- list()
+    
+    # Define valid column names, data types, and valid values
+    required_columns <- data.frame(
+      Name = c("Organism Group", "Life Stage", "Species", 
+               "Estimated Maximum Ingestible Size (mm)", 
+               "Level of Biological Organization", "Exposure Route", 
+               "Environment", "Acute/Chronic", "Exposure Duration (days)", 
+               "translocatable", "Effect Score", "Effect Metric", 
+               "Broad Endpoint Category", "Specific Endpoint Category", 
+               "Empirical Tissue Translocation ERM Conc. (log 10 particles/mL; 1-5,000 um)", 
+               "Empirical Food Dilution ERM Conc. (log 10 particles/mL; 1-5,000 um)", 
+               "PA_fraction", "PE_fraction", "PET_fraction", "PLA_fraction", 
+               "PMMA_fraction", "PP_fraction", "PS_fraction", "PUR_fraction", 
+               "PVC_fraction", "fiber_fraction", "fragment_fraction", "sphere_fraction"),
+      Type = c("character", "character", "character", "numeric", 
+               "character", "character", "character", "character", 
+               "numeric", "character", "numeric", "character", 
+               "character", "character", "numeric", "numeric", 
+               "numeric", "numeric", "numeric", "numeric", 
+               "numeric", "numeric", "numeric", "numeric", 
+               "numeric", "numeric", "numeric", "numeric"),
+      Optional = c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, 
+                   FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, 
+                   TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, 
+                   FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
+    )
+    
+    # 1. Check for missing column names
+    missing_columns <- setdiff(required_columns$Name, colnames(user_data))
+    if (length(missing_columns) > 0) {
+      messages <- c(messages, paste0("Missing columns: ", paste(missing_columns, collapse = ", ")))
+    }
+    
+    # 2. Check for incorrect data types
+    for (col in intersect(required_columns$Name, colnames(user_data))) {
+      expected_type <- required_columns$Type[required_columns$Name == col]
+      actual_type <- class(user_data[[col]])
+      
+      # Handle integer/numeric distinction
+      if (expected_type == "numeric" && actual_type == "integer") {
+        actual_type <- "numeric"
+      }
+      
+      if (expected_type != actual_type) {
+        messages <- c(messages, paste0("Column '", col, "' has incorrect type. Expected: ", expected_type, ", Found: ", actual_type))
+      }
+    }
+    
+    # 3. Validate character column values
+    for (col in intersect(required_columns$Name, colnames(user_data))) {
+      if (required_columns$Type[required_columns$Name == col] == "character") {
+        valid_levels <- valid_values$Level[valid_values$VarName == col]
+        invalid_values <- setdiff(unique(user_data[[col]]), valid_levels)
+        if (length(invalid_values) > 0) {
+          messages <- c(messages, paste0("Column '", col, "' contains invalid values: ", paste(invalid_values, collapse = ", ")))
+        }
+      }
+    }
+    
+    # 4. Check numeric columns with range constraints (0 to 1)
+    range_columns <- c("PA_fraction", "PE_fraction", "PET_fraction", "PLA_fraction", 
+                       "PMMA_fraction", "PP_fraction", "PS_fraction", "PUR_fraction", 
+                       "PVC_fraction", "fiber_fraction", "fragment_fraction", "sphere_fraction")
+    for (col in intersect(range_columns, colnames(user_data))) {
+      if (any(user_data[[col]] < 0 | user_data[[col]] > 1, na.rm = TRUE)) {
+        messages <- c(messages, paste0("Column '", col, "' contains values outside the range 0 to 1."))
+      }
+    }
+    
+    # Return validation messages
+    if (length(messages) == 0) {
+      return(list(success = TRUE, message = "All checks passed!"))
+    } else {
+      return(list(success = FALSE, message = messages))
+    }
+  })
+  
+  # Display validation results
+  output$validation_results <- renderUI({
+    validation <- validate_data()
+    if (is.null(validation)) return(NULL)
+    
+    if (validation$success) {
+      tags$div(style = "color: green; font-size: 1.5em; font-weight: bold;", validation$message)
+    } else {
+      tags$div(style = "color: red;", lapply(validation$message, tags$p))
+    }
+  })
+  
+  # render DT of test data prediction
+  output$user_prediction_DT <- renderDT(server = TRUE,{
+    
+    req(input$prediction_file)
+    
+    #read in user data
+    user_data <- readr::read_csv(input$prediction_file$datapath)
+    
+    datatable(user_data,
+              rownames = F,
+              extensions = 'Buttons', #enable buttons extension
+              filter = "top",
+              options = list(pageLength = 25, autoWidth = TRUE,  width = '100%', scrollX = TRUE,
+                             dom = 'Blrtip', 
+                             buttons = list(
+                               # insert buttons with copy and print
+                               # colvis includes the button to select and view only certain columns in the output table
+                               # from https://rstudio.github.io/DT/extensions.html 
+                               I('colvis'), 'copy', 'print',
+                               # code for the first dropdown download button. this will download only the current page only (depends on the number of rows selected in the lengthMenu)
+                               # using modifier = list(page = "current")
+                               # only the columns visible will be downloaded using the columns:":visible" option from:
+                               list(extend = 'collection', buttons = list(list(extend = "csv", filename = "page",exportOptions = list(
+                                 columns = ":visible",modifier = list(page = "current"))),
+                                 list(extend = 'excel', filename = "page", title = NULL, 
+                                      exportOptions = list(columns = ":visible",modifier = list(page = "current")))),
+                                 text = 'Download current page'),
+                               # code for the  second dropdown download button
+                               # this will download the entire dataset using modifier = list(page = "all")
+                               list(extend = 'collection',
+                                    buttons = list(list(extend = "csv", filename = "data",exportOptions = list(
+                                      columns = ":visible",modifier = list(page = "all"))),
+                                      list(extend = 'excel', filename = "data", title = NULL, 
+                                           exportOptions = list(columns = ":visible",modifier = list(page = "all")))),
+                                    text = 'Download all data')),
+                             # add the option to display more rows as a length menu
+                             lengthMenu = list(c(10, 30, 50, -1),
+                                               c('10', '30', '50', 'All'))),class = "display")
+  })
+  
+  # Combine user data with training data
+  combined_data <- reactive({
+    req(input$prediction_file)
+    #read in user data
+    user_data <- readr::read_csv(input$prediction_file$datapath)
+    
+    test <- user_data %>% mutate(train_test = "test")
+    train <- train_data_prediction %>% mutate(train_test = "train")
+    combined_data <- bind_rows(test, train)
+    combined_data
+  })
+  
+  preprocess_data <- reactive({
+    req(combined_data())
+    combined_data <- combined_data()
+    
+    # Separate numeric and character columns
+    numeric_data <- combined_data %>% select(where(is.numeric))
+    char_data <- combined_data %>% select(where(is.character))
+    
+    # One-hot encode character columns
+    if (ncol(char_data) > 0) {
+      dummies <- dummyVars("~ .", data = char_data)
+      char_encoded <- as.data.frame(predict(dummies, newdata = char_data))
+    } else {
+      char_encoded <- NULL
+    }
+    
+    # Combine numeric and one-hot encoded combined_data
+    processed_data <- bind_cols(numeric_data, char_encoded)
+    processed_data$train_test <- combined_data$train_test
+    processed_data
+  })
+  
+  # Render UMAP plot
+  output$umapPlot <- renderPlot({
+    req(preprocess_data())
+    
+    # Preprocessed data
+    processed_data <- preprocess_data()
+    numeric_data <- processed_data %>% select(-train_test) %>% na.omit() # Remove train_test for UMAP
+    
+    # Run UMAP
+    # Run UMAP with adjusted parameters
+    umap_result <- umap(
+      numeric_data,
+      n_neighbors = 120, # Capture more global structure
+      min_dist = 0.0,   # Pack points densely
+      n_components = 2 # Reduce to 2D for visualizatio
+    )
+    
+    # Add UMAP results back to the data
+    umap_df <- as.data.frame(umap_result)
+    colnames(umap_df) <- c("UMAP1", "UMAP2")
+    umap_df$train_test <- processed_data$train_test[!is.na(rowSums(numeric_data))]
+    
+    # Plot UMAP results
+    ggplot(umap_df, aes(x = UMAP1, y = UMAP2, color = train_test)) +
+      geom_point(alpha = 0.12, size = 2) +
+      labs(title = "UMAP Visualization of Training and Test Data",
+           x = "UMAP Dimension 1", y = "UMAP Dimension 2") +
+      theme_minimal(base_size = 15) +
+      theme(legend.position = "top")
+  })
   
   #skim user-input dataset
   output$predictionDataSkim <- renderPlot({
@@ -9770,7 +10016,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       scale_color_discrete(name = "Training or Test Data") +# as density
       ylab("Relative Proportion") +
       xlab("Variable") +
-      theme_minimal() +
+      theme_minimal(base_size = 15) +
       theme(legend.position = "top")
   })
   
@@ -9786,6 +10032,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   # make predictions based on user-uploaded dataste
   prediction_reactiveDF<-eventReactive(list(input$go_predict),{
     req(input$prediction_file)
+    req(input$go_predict)
     
     #choose model based on user-selected ERM
     if(input$ERM_radio == "tissue translocation"){
@@ -9800,7 +10047,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
     
     df$predictions <- caret::predict.train(model, newdata = df, na.action = na.omit)
     
-    df <- df %>%
+    prediction_reactiveDF <- df %>%
      # dplyr::select(-X) %>% 
       mutate(predictions.linear = 10 ^ predictions) %>% 
       dplyr::relocate(predictions, predictions.linear) %>% 
@@ -9810,24 +10057,45 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
              #"Empirical Food Dilution ERM Conc. (log 10 particles/mL; 1-5,000 um)" = log10.particles.mL.food.dilution.known
              )
     
-    return(df)
+    return(prediction_reactiveDF)
   })
   
   #render predictions in datatable
   output$predictionsTable = DT::renderDataTable({
     req(input$prediction_file)
     
-    datatable(prediction_reactiveDF() %>%  mutate_if(is.numeric, ~ signif(., 3)),
-              extensions = c('Buttons'),
-              style = "bootstrap",
-              options = list(
-                dom = 'Brtip',
-                buttons = list(I('colvis'), c('copy', 'csv', 'excel')),
-                scrollY = 400,
-                scrollH = TRUE,
-                sScrollX = TRUE,
-                columnDefs = list(list(width = '50px', targets = "_all"))),#only display the table and nothing else
-              caption = "Filtered Data") %>% 
+    prediction_reactiveDF <- prediction_reactiveDF()
+    
+    prediction_reactiveDF %>% 
+      mutate_if(is.numeric, ~ signif(., 3)) %>% 
+      mutate_if(is.character, ~as.factor(.)) %>% 
+      datatable(rownames = F,
+                extensions = 'Buttons', #enable buttons extension
+                filter = "top",
+                options = list(pageLength = 25, autoWidth = TRUE,  width = '100%', scrollX = TRUE,
+                               dom = 'Blrtip', 
+                               buttons = list(
+                                 # insert buttons with copy and print
+                                 # colvis includes the button to select and view only certain columns in the output table
+                                 # from https://rstudio.github.io/DT/extensions.html 
+                                 I('colvis'), 'copy', 'print',
+                                 # code for the first dropdown download button. this will download only the current page only (depends on the number of rows selected in the lengthMenu)
+                                 # using modifier = list(page = "current")
+                                 # only the columns visible will be downloaded using the columns:":visible" option from:
+                                 list(extend = 'collection', buttons = list(list(extend = "csv", filename = "page",exportOptions = list(
+                                   columns = ":visible",modifier = list(page = "current"))),
+                                   list(extend = 'excel', filename = "page", title = NULL, 
+                                        exportOptions = list(columns = ":visible",modifier = list(page = "current")))),
+                                   text = 'Download current page'),
+                                 # code for the  second dropdown download button
+                                 # this will download the entire dataset using modifier = list(page = "all")
+                                 list(extend = 'collection',
+                                      buttons = list(list(extend = "csv", filename = "data",exportOptions = list(
+                                        columns = ":visible",modifier = list(page = "all"))),
+                                        list(extend = 'excel', filename = "data", title = NULL, 
+                                             exportOptions = list(columns = ":visible",modifier = list(page = "all")))),
+                                      text = 'Download all data'))),
+                caption = "Filtered Data") %>% 
       formatStyle(
         c("Predicted Conc. (particles/mL; 1-5,000 um)", "Predicted Conc. (log10 particles/mL; 1-5,000 um)"),
         backgroundColor = '#a9d6d6')
@@ -9848,36 +10116,59 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   
   output$predictionsScatter <- renderPlot({
     
-    prediction_var <- input$prediction_var
-    
-        #choose known concentrations based on ERM
-    if(input$ERM_radio == "tissue translocation"){
-   scatterPlot <- prediction_reactiveDF() %>% 
-      ggplot(aes(x = `Empirical Tissue Translocation ERM Conc. (log 10 particles/mL; 1-5,000 um)`,
-                 y = `Predicted Conc. (log10 particles/mL; 1-5,000 um)`))
-    }
-    
-    if(input$ERM_radio == "food dilution"){
-      scatterPlot <- prediction_reactiveDF() %>% 
-        ggplot(aes(x = `Empirical Food Dilution ERM Conc. (log 10 particles/mL; 1-5,000 um)`,
-                   y = `Predicted Conc. (log10 particles/mL; 1-5,000 um)`
-                   ))
-    }
-   
-    #add layers to plot
-    scatterPlot <- scatterPlot +
-      geom_point(aes_string(color = prediction_var)) + 
-      geom_smooth(method = "lm", se=TRUE, color="red", formula = y ~ x) +
-      geom_abline(slope = 1, linetype = "dashed") +
-      #scale_color_manual(values = variable) +
-      #display r2 and equation
-      ggpubr::stat_regline_equation(label.y = 7, aes(label = ..eq.label..)) +
-      ggpubr::stat_regline_equation(label.y = 7.5, aes(label = ..rr.label..)) +
-      xlab("Known Effect Concentrations (Particles/mL)") +
-      ylab("Predicted Effect Concentrations (Particles/mL)") +
-      theme_minimal()
-    
-   print(scatterPlot) 
+     req(input$ERM_radio, input$prediction_var)
+      
+      prediction_var <- input$prediction_var
+      
+      prediction_reactiveDF <- prediction_reactiveDF()
+      
+      # Choose known concentrations based on ERM
+      if (input$ERM_radio == "tissue translocation") {
+        scatter_data <- prediction_reactiveDF %>%
+          mutate(
+            x = `Empirical Tissue Translocation ERM Conc. (log 10 particles/mL; 1-5,000 um)`,
+            y = `Predicted Conc. (log10 particles/mL; 1-5,000 um)`
+          )
+      } else if (input$ERM_radio == "food dilution") {
+        scatter_data <- prediction_reactiveDF() %>%
+          mutate(
+            x = `Empirical Food Dilution ERM Conc. (log 10 particles/mL; 1-5,000 um)`,
+            y = `Predicted Conc. (log10 particles/mL; 1-5,000 um)`
+          )
+      }
+      
+      # Calculate regression metrics
+      lm_model <- lm(y ~ x, data = scatter_data)
+      r_squared <- summary(lm_model)$r.squared
+      equation <- paste0("y = ", round(coef(lm_model)[2], 1), "x + ", round(coef(lm_model)[1], 1))
+      predictions <- predict(lm_model, scatter_data)
+      rmse <- round(sqrt(mean((scatter_data$y - predictions)^2)),2)
+      mae <- round(mean(abs(scatter_data$y - predictions)),3)
+      
+      # Add layers to plot
+      scatterPlot <- scatter_data %>%
+        ggplot(aes(x = x, y = y
+                   )) +
+        geom_point(alpha = 0.4,
+                   aes_string(color = prediction_var)) +
+        geom_smooth(method = "lm", se = TRUE, color = "red", formula = y ~ x) +
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black", size = 1) + # 1:1 line
+        geom_abline(slope = 1, intercept = 1, linetype = "dotted", color = "blue", size = 1) + # 3x line
+        geom_abline(slope = 1, intercept = -1, linetype = "dotted", color = "blue", size = 1) + # 1/3x line
+        annotate("text", x = -1, y = max(scatter_data$y) * 0.85,
+                 label = paste0("R² = ", round(r_squared, 3)), color = "darkred", size = 5, hjust = 0) +
+        annotate("text", x = -1, y = max(scatter_data$y) * 0.7,
+                 label = paste0(equation), color = "darkred", size = 5, hjust = 0) +
+        annotate("text", x = -1, y = max(scatter_data$y) * 0.55,
+                 label = paste0("RMSE = ", round(rmse, 3)), color = "darkred", size = 5, hjust = 0) +
+        annotate("text", x = -1, y = max(scatter_data$y) * 0.4,
+                 label = paste0("MAE = ", round(mae, 3)), color = "darkred", size = 5, hjust = 0) +
+        xlab(label_wrap(40)("Known Effect Concentration (log10[Particles/mL; 1 to 5,000 um])")) +
+        ylab(label_wrap(40)("Predicted Effect Concentrations (log10[Particles/mL; 1 to 5,000 um])")) +
+        theme_minimal(base_size = 15) +
+        theme(legend.position = "bottom")
+      
+      print(scatterPlot) 
    
   })
   
