@@ -4966,9 +4966,68 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                              ingestion.translocation == "none" ~ x2D_set)) %>% 
       #calculate CF_bio for all conversions
       mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
+      ###############################################################################
+    ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
+    ######################################################################################
+    ## assign whether polydisperse data are partially, fully, or not bioavailable
+    mutate(ingestible_poly = case_when(
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (all)",
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (some)",
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions > x2M_ingest ~ "not ingestible"),
+      translocatable_poly = case_when(
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (all)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
+    ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
+      # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
+      ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
+    mutate(size.length.max.um.used.for.conversions = case_when(
+      is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
+      !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000)) %>% 
+      # correct for partially translocatable particles
+      mutate(CF_bioavailable_trans = case_when(translocatable_poly == "translocatable (some)" ~ CFfnx(a = alpha,
+                                                                                                      x1D = size.length.min.um.used.for.conversions,
+                                                                                                      x2D = x2M_trans,
+                                                                                                      x1M = size.length.min.um.used.for.conversions,
+                                                                                                      x2M = size.length.max.um.used.for.conversions),
+                                               T ~ 1)) %>% # all other cases retain original dose
+      # now correct the dosage (will be fraction )
+      mutate(dose.particles.mL.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.mL.master,
+                                                 T ~ dose.particles.mL.master),
+             dose.particles.kg.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.kg.sediment.master,
+                                                 T ~ dose.particles.kg.sediment.master)) %>% 
+      # correct for partially ingestible particles
+      mutate(CF_bioavailable_ingest = case_when(ingestible_poly == "ingestible (some)" ~ CFfnx(a = alpha,
+                                                                                               x1D = size.length.min.um.used.for.conversions,
+                                                                                               x2D = x2M_ingest,
+                                                                                               x1M = size.length.min.um.used.for.conversions,
+                                                                                               x2M = size.length.max.um.used.for.conversions),
+                                                T ~ 1)) %>% 
+      mutate(dose.particles.mL.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.mL.master,
+                                                  T ~ dose.particles.mL.master),
+             dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
+                                                  T ~ dose.particles.kg.sediment.master)
+      ) %>% 
+      # correct for particles when no bioavailability filter selected by user
+      mutate(dose.particles.mL.no_filter = CF_bio * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF_bio * dose.particles.kg.sediment.master) %>% 
         ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     ## calculate size parameters using compartment characteristics
-    ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
+    ##### re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
     ##### ----- LENGTH ------ ###
     # no need to correct monodisperse. Min for polydispserse remains same #
     ## polydisperse ##
@@ -5044,66 +5103,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
       )) %>%
-      ###############################################################################
-    ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
-    ######################################################################################
-    ## assign whether polydisperse data are partially, fully, or not bioavailable
-    mutate(ingestible_poly = case_when(
-      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (all)",
-      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (some)",
-      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions > x2M_ingest ~ "not ingestible"),
-      translocatable_poly = case_when(
-        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (all)",
-        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
-        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
-    ) %>% 
-      ###### Collapse polydisperse and monodisperse bioavailabilities #####
-    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
-                                   "not translocatable", 
-                                   "translocatable")) %>% 
-      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
-                                 "not ingestible", 
-                                 "ingestible")) %>% 
-      ## collapse poly/mono bioavailbilities
-      mutate(ingestible = case_when(
-        !is.na(ingestible_poly) ~ ingestible_poly,
-        T ~ ingestible),
-        translocatable = case_when(
-          !is.na(translocatable_poly) ~ translocatable_poly,
-          T ~ translocatable)) %>% 
-      # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
-      ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
-    mutate(size.length.max.um.used.for.conversions = case_when(
-      is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
-      !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000)) %>% 
-      # correct for partially translocatable particles
-      mutate(CF_bioavailable_trans = case_when(translocatable_poly == "translocatable (some)" ~ CFfnx(a = alpha,
-                                                                                                      x1D = size.length.min.um.used.for.conversions,
-                                                                                                      x2D = x2M_trans,
-                                                                                                      x1M = size.length.min.um.used.for.conversions,
-                                                                                                      x2M = size.length.max.um.used.for.conversions),
-                                               T ~ 1)) %>% # all other cases retain original dose
-      # now correct the dosage (will be fraction )
-      mutate(dose.particles.mL.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.mL.master,
-                                                 T ~ dose.particles.mL.master),
-             dose.particles.kg.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.kg.sediment.master,
-                                                 T ~ dose.particles.kg.sediment.master)) %>% 
-      # correct for partially ingestible particles
-      mutate(CF_bioavailable_ingest = case_when(ingestible_poly == "ingestible (some)" ~ CFfnx(a = alpha,
-                                                                                               x1D = size.length.min.um.used.for.conversions,
-                                                                                               x2D = x2M_ingest,
-                                                                                               x1M = size.length.min.um.used.for.conversions,
-                                                                                               x2M = size.length.max.um.used.for.conversions),
-                                                T ~ 1)) %>% 
-      mutate(dose.particles.mL.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.mL.master,
-                                                  T ~ dose.particles.mL.master),
-             dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
-                                                  T ~ dose.particles.kg.sediment.master)
-      ) %>% 
-      # correct for particles when no bioavailability filter selected by user
-      mutate(dose.particles.mL.no_filter = CF_bio * dose.particles.mL.master,
-             dose.particles.kg.no_filter = CF_bio * dose.particles.kg.sediment.master) %>% 
-    
+     
       
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
