@@ -5,5 +5,5 @@ account: sccwrp
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 9171208
-bundleId: 10215749
+bundleId: 10308447
 url: https://sccwrp.shinyapps.io/tomex_20_aquatic_organisms/
