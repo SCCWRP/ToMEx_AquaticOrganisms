@@ -149,7 +149,7 @@ ui <- dashboardPage(
                     
                     p("To access previous versions of the ToMEx database and web application, ", a(href = "https://github.com/SCCWRP/aq_mp_tox_shiny", 'click here.')),
                     
-                    strong(p("Disclaimer: ToMEx is an evolving, community-built tool. When using ToMEx 2.0, it is highly recommended that underlying data and code are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
+                    strong(p("Disclaimer: ToMEx is an evolving, community-built tool. The manuscript describing ToMEx 2.0 is currently under peer review. When using ToMEx 2.0, it is highly recommended that underlying data and code are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
                     
                     h3("What is the Microplastics Toxicity Database?", align = "center"), 
                     
