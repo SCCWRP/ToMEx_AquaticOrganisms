@@ -4,8 +4,7 @@ The Toxicity of Microplastics Explorer (ToMEx) is a database as well as a data v
 
 The web application is built using a variety of R packages including shiny, shinydashboard, tidyverse, ggplot, plotly, and ssdtools. 
 
-ToMEx 1.0 Application deployed at: https://sccwrp.shinyapps.io/aq_mp_tox_shiny/
-ToMEx 2.0 Application deployed at: https://sccwrp.shinyapps.io/tomex_20_aquatic_organisms/
+Previous versions (<2.0) of ToMEx are accessible at: https://github.com/SCCWRP/aq_mp_tox_shiny
 
 **Contributors**
 
