@@ -2911,12 +2911,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                          width = size.width.max.um.trans, 
                                                          height = size.height.max.um.trans)) %>% 
       ### Ingest ### 
-      mutate(particle.surface.area.um2.max.ingest = volumefnx(R = R.ave,
+      mutate(particle.surface.area.um2.max.ingest = SAfnx(R = R.ave,
+                                                          H_W_ratio = H_W_ratio,
                                                               length = size.length.max.um.ingest,
                                                               width = size.width.max.um.ingest, 
                                                               height = size.height.max.um.ingest)) %>% 
       ### No bioavailbility filter ### 
-      mutate(particle.surface.area.um2.max.none = volumefnx(R = R.ave,
+      mutate(particle.surface.area.um2.max.none = SAfnx(R = R.ave,
+                                                        H_W_ratio = H_W_ratio,
                                                             length = size.length.max.um.used.for.conversions,
                                                             width = size.width.max.um.used.for.conversions, 
                                                             height = size.height.max.um.used.for.conversions)) %>% 
@@ -5159,12 +5161,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                          width = size.width.max.um.trans, 
                                                          height = size.height.max.um.trans)) %>% 
       ### Ingest ### 
-      mutate(particle.surface.area.um2.max.ingest = volumefnx(R = R.ave,
+      mutate(particle.surface.area.um2.max.ingest = SAfnx(R = R.ave,
+                                                          H_W_ratio = H_W_ratio,
                                                               length = size.length.max.um.ingest,
                                                               width = size.width.max.um.ingest, 
                                                               height = size.height.max.um.ingest)) %>% 
       ### No bioavailbility filter ### 
-      mutate(particle.surface.area.um2.max.none = volumefnx(R = R.ave,
+      mutate(particle.surface.area.um2.max.none = SAfnx(R = R.ave,
+                                                            H_W_ratio = H_W_ratio,
                                                             length = size.length.max.um.used.for.conversions,
                                                             width = size.width.max.um.used.for.conversions, 
                                                             height = size.height.max.um.used.for.conversions)) %>% 
@@ -6636,12 +6640,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                          width = size.width.max.um.trans, 
                                                          height = size.height.max.um.trans)) %>% 
       ### Ingest ### 
-      mutate(particle.surface.area.um2.max.ingest = volumefnx(R = R.ave,
+      mutate(particle.surface.area.um2.max.ingest = SAfnx(R = R.ave,
+                                                          H_W_ratio = H_W_ratio,
                                                               length = size.length.max.um.ingest,
                                                               width = size.width.max.um.ingest, 
                                                               height = size.height.max.um.ingest)) %>% 
       ### No bioavailbility filter ### 
-      mutate(particle.surface.area.um2.max.none = volumefnx(R = R.ave,
+      mutate(particle.surface.area.um2.max.none = SAfnx(R = R.ave,
+                                                            H_W_ratio = H_W_ratio,
                                                             length = size.length.max.um.used.for.conversions,
                                                             width = size.width.max.um.used.for.conversions, 
                                                             height = size.height.max.um.used.for.conversions)) %>% 
@@ -9441,12 +9447,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
                                                          width = size.width.max.um.trans, 
                                                          height = size.height.max.um.trans)) %>% 
       ### Ingest ### 
-      mutate(particle.surface.area.um2.max.ingest = volumefnx(R = R.ave,
+      mutate(particle.surface.area.um2.max.ingest = SAfnx(R = R.ave,
+                                                          H_W_ratio = H_W_ratio,
                                                               length = size.length.max.um.ingest,
                                                               width = size.width.max.um.ingest, 
                                                               height = size.height.max.um.ingest)) %>% 
       ### No bioavailbility filter ### 
-      mutate(particle.surface.area.um2.max.none = volumefnx(R = R.ave,
+      mutate(particle.surface.area.um2.max.none = SAfnx(R = R.ave,
+                                                            H_W_ratio = H_W_ratio,
                                                               length = size.length.max.um.used.for.conversions,
                                                               width = size.width.max.um.used.for.conversions, 
                                                               height = size.height.max.um.used.for.conversions)) %>% 
