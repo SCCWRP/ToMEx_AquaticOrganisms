@@ -1,0 +1,7229 @@
+#### Aquatic Microplastics Toxicology Shiny App
+#### File created: September 23, 2020
+#### Code contributors: Heili Lowman, Leah Thornton Hampton, Scott Coffin, Emily Darin
+
+#### Setup ####
+# Load functions
+source("functions.R")
+# custom fxn to check and install the required ver of ssdtools
+check_and_install_version("ssdtools", "0.3.7")
+library(ssdtools)
+
+# Load packages
+library(ssdtools)
+library(tidyverse) #General everything
+library(shinydashboard)
+library(RColorBrewer) #color palette
+library(ggplot2) #plotting
+library(calecopal) #Color palette devtools::install_github("an-bui/calecopal")
+library(shiny) #Runs shiny
+library(shinythemes) #Shiny theme for the page
+library(shinyWidgets) #Widgets
+library(scales) #SSD - Use the percent format
+library(reshape2) #Overview tab - melts bars together
+library(DT) #Build HTML data tables
+library(plotly) #Make plots interactive
+library(viridis) #Colors
+library(shinyjs) #Exploration tab - reset button
+library(tigerstats) #turns things into percents
+library(ggbeeswarm) #plot all points
+library(plotly)
+library(ggdark) #dark mode ggplot
+library(ggsci) #color palettes
+library(collapsibleTree) #plot type for endpoint category tree
+library(hrbrthemes) #theme for screening plot
+library(ggrepel)
+library(msm) ## rtnorm - get upper and lower limit of shape distribution
+library(GeneralizedHyperbolic) ## normal-inverse Gaussian
+library(stats)
+library(caret) # for random forest predictions
+library(randomForest) # for random forest predictions
+library(umap) # For UMAP
+library(uwot) # Alternative UMAP implementation
+library(shinycssloaders) #shows spinner when loading
+
+
+# ensure correct version of ssdtools is installed
+#install.packages("https://cran.r-project.org/src/contrib/Archive/ssdtools/ssdtools_0.3.7.tar.gz", repos=NULL, type="source")
+
+# Load finalized dataset (prepped in RDAmaker.R)
+aoc <- readRDS("aoc_setup_tomex2.RDS")
+aoc_endpoint <- readRDS("aoc_endpoint_tomex2.RDS")
+aoc_quality <- readRDS("aoc_quality_tomex2.RDS")
+aoc_search <- readRDS("aoc_search_tomex2.RDS")
+aoc_setup <- readRDS("aoc_setup_tomex2.RDS") %>% mutate(Group = org_f)
+# aoc_v1 <- readRDS("aoc_v1.RDS")
+aoc_z <- readRDS("aoc_z_tomex2.RDS")
+
+# aoc_setup <- aoc_setup %>%
+#  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
+#   filter(doi != "10.3390/nano11030649")
+# 
+# aoc_z <- aoc_z %>%
+#  filter(doi != "10.1016/j.marpolbul.2021.112369") %>%
+# filter(doi != "10.3390/nano11030649")
+
+#prediction models generated in aq_mp_tox_modelling repo (Scott_distributions_no_touchy.Rmd)
+predictionModel_tissue.translocation <- readRDS("prediction/randomForest_oxStress.rds")
+predictionModel_food.dilution <- readRDS("prediction/randomForest_foodDilution.rds")
+test_data_prediction <- readr::read_csv("prediction/test_data_prediction.csv") %>% mutate_if(is.character, factor) %>%  dplyr::select(-`...1`) #contains spaces!
+test_data_calculator <- read.csv("calculator/test_data_calculator.csv", stringsAsFactors = TRUE)
+valid_values <- readr::read_csv("prediction/valid_values.csv") %>%  dplyr::select(-`...1`) #contains spaces!test_data_calculator <- read.csv("calculator/test_data_calculator.csv", stringsAsFactors = TRUE
+train_data_prediction <- readr::read_csv("prediction/training_data_prediction.csv") %>% mutate_if(is.character, factor) %>%  dplyr::select(-`...1`) #contains spaces!
+
+
+
+
+## Create environmentally realistic data
+synthetic_data_builder <- function(count){
+  #Preset parameters for pdfs
+  ## Generate values for the three distributions
+  set.seed(123)
+  simulated.data <- data.frame(Size = numeric(0))
+  for(i in 1:count){
+    X <- X.func()
+    simulated.data <- rbind(simulated.data, X)}}
+
+
+#### User Interface ####
+
+ui <- dashboardPage(
+
+  dashboardHeader(title = "Toxicity of Microplastics Explorer 2.0", titleWidth = 400),
+
+  dashboardSidebar(width = 175,
+                   
+                   sidebarMenu(
+                     #Logo image
+                     br(),
+                     tags$img(src="main_logo_drop.png", width = "100%", height = "100%", style = 'display: block; margin-left: auto; margin-right: auto;'),
+                     tags$div("Logo created by J.C. Leapman.", align = 'center', style = 'font-size: 10px; display: block; margin-left: auto; margin-right: auto;'), 
+                     br(),         
+                     #List of tabs
+                     menuItem("Welcome", tabName = "Welcome", icon = icon("home")),
+                     menuItem("Overview", tabName = "Overview", icon = icon("globe")),
+                     menuItem("Search", tabName = "Search", icon = icon("search")),
+                     menuItem("Exploration", tabName = "Exploration", icon = icon("chart-bar")),
+                     menuItem("SSD", tabName = "SSD", icon = icon("fish")),
+                     menuItem("Study Screening", tabName = "Screening", icon = icon("check-circle")),
+                     menuItem("Calculators", tabName = "Calculators", icon = icon("calculator")),
+                     menuItem("Predictions", tabName = "Predictions", icon = icon("brain")),
+                     menuItem("Resources", tabName = "Resources", icon = icon("question-circle")),
+                     menuItem("Data Submission", tabName = "Submission", icon = icon("fas fa-file-upload")),
+                     menuItem("Contact", tabName = "Contact", icon = icon("envelope")),
+                     br(),
+                     br(),
+                     menuItem("GitHub", href = "https://github.com/SCCWRP/ToMEx_AquaticOrganisms", icon = icon("github")),
+                     br(),
+                     menuItem("Human Health v2.0", href = "https://sccwrp.shinyapps.io/human_mp_tox_shiny-/", icon = icon("user")),
+                     br())
+  
+                   ), #End dashboard sidebar
+
+  dashboardBody(
+    
+    #extends background color automatically
+    tags$head(tags$style(HTML('.content-wrapper { overflow: auto; }'))),
+    
+    tabItems(
+      
+##### Welcome UI #####        
+      tabItem(tabName = "Welcome",
+               
+              #Header     
+              h1("Welcome to the Toxicity of Microplastics Explorer 2.0,",br(),"Aquatic Organisms Database!", align = 'center'),
+              br(),
+              
+              
+              box(status = "primary", width = 12,
+                    fluidRow(
+                    #top right box
+                    column(width = 12, 
+                           
+                    p(tags$img(src="welcome.png", width = "40%", height = "40%", style = "float:left; display: block; margin-left: auto; margin-right: 30px;")),
+                    
+                    h3("Toxicity of Microplastics Explorer 2.0", align = "center"), 
+                    
+                    p("The Toxicity of Microplastics Explorer 2.0 (ToMEx 2.0) is a major expansion of the orginal ToMEx database coordinated by SCCWRP through
+                              a four-part virtual workshop series of more than 60 researchers from 14 different nations."),
+                    
+                    p("To access previous versions of the ToMEx database and web application, ", a(href = "https://github.com/SCCWRP/aq_mp_tox_shiny", 'click here.')),
+                    
+                    strong(p("Disclaimer: ToMEx is an evolving, community-built tool. The manuscript describing ToMEx 2.0 is currently under peer review. When using ToMEx 2.0, it is highly recommended that underlying data and code are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
+                    
+                    h3("What is the Microplastics Toxicity Database?", align = "center"), 
+                    
+                    strong(p("This database is a repository for microplastics 
+                      toxicity data for the California Microplastics Health Effects Workshop.")), 
+                    
+                    p("This web application allows users to explore toxicity 
+                    data using an intuitive interface while retaining the diversity and complexity inherent 
+                    to microplastics. Data is extracted from existing, peer-reviewed manuscripts containing 
+                    toxicity data pertaining to microplastics."),
+                  
+                    p("A full length description of the ToMEx 1.0 database and web application is published in ", 
+                      a(href = "https://www.springeropen.com/collections/sccwrp", 'Microplastics and Nanoplastics'),
+                      ". To access the open access manuscript, ", a(href = "https://microplastics.springeropen.com/articles/10.1186/s43591-022-00032-4", 'click here'),"."),
+                    
+                    p("Use the side panel on the left of the page to navigate to each section. Each section provides different information or data visualization options. 
+                      More specific instructions may be found within each section.")))),
+              
+                    #bottom left box  
+                    box(status = "primary", width = 12, 
+                    h3("Why was the Microplastics Toxicity Database and Web Application created?", align = "center"),
+                    
+                    p("The database and application tools have been created for use by the participants of the ", a(href = "https://www.sccwrp.org/about/
+                      research-areas/additional-research-areas/
+                      trash-pollution/microplastics-health-effects-webinar-series/", 'Microplastics Health Effects Workshop', 
+                      .noWS = "outside"),".The purpose of this workshop is to identify the most sensitive and biologically critical endpoints associated with microplastics exposure, 
+                      prioritize which microplastics characteristics (e.g., size, shape, polymer) that are of greatest biological concern, and identify 
+                      critical thresholds for each at which those biological effects become pronounced. Workshop participants will also make reccomendations for future
+                      research investments. Workshop findings will be published in a special issue of ", a(href ="https://microplastics.springeropen.com/", 'Microplastics and Nanoplastics', .noOWs = "outside"),". 
+                      These findings will be used directly by the state of California to fulfill ", a(href = "https://www.sccwrp.org/about/research-areas/
+                      additional-research-areas/trash-pollution/microplastics-health-effects-webinar-series/history-california-microplastics-legislation/", 'legislative mandates', 
+                      .noWS = "outside")," regarding the management of microplastics in drinking water and the aquatic environment.")),
+                   
+                    #bottom right box  
+                    box(status = "primary", width = 12,
+                        
+                        h3("ToMEx 2.0 Steering Committee", align = "center"),
+                        
+                        p(align = "center", "Dr. Leah Thornton Hampton, Southern California Coastal Water Research Project"),
+                        
+                        p(align = "center", "Dr. Scott Coffin, California Office of Environmental Health Hazard Assessment"),
+                        
+                        p(align = "center", "Dana Briggs Wyler, Southern California Coastal Water Research Project"),
+                        
+                        p(align = "center", "Dr. Bethanie Carney Almroth, University of Gothenburg"),
+                        
+                        p(align = "center", "Dr. Win Cowger, Moore Institute for Plastic Pollution Research"),
+                        
+                        p(align = "center", "Darragh Doyle, University of Gothenburg"),
+                        
+                        p(align = "center", "Eden Hataley, University of Toronto"),
+                        
+                        p(align = "center", "Dr. Sara Hutton, GSI Environmental Inc."),
+                        
+                        p(align = "center", "Dr. Magdalena Mair, University of Bayreuth"),
+                        
+                        p(align = "center", "Dr. Ezra Miller, San Francisco Estuary Institute"),
+                        
+                        p(align = "center", "Dr. Laura Monclús, Norwegian Geotechnical Institute"),
+                        
+                        p(align = "center", "Emma Sharpe, Western Washington University"),
+                        
+                        p(align = "center", "Dr. Samreen Siddiqui, Oregon State University"),
+                        
+                        p(align = "center", "Dr. Alvine Mehinto, Southern California Coastal Water Research Project"),
+                        
+                        h3("ToMEx 2.0 Workgroup Participants", align = "center"),
+                        
+                        p("To view the full list of ToMEx 2.0 Workgroup Participants", 
+                          a(href = "https://sccwrp-my.sharepoint.com/:b:/g/personal/leahth_sccwrp_org/Ec1tJoQwukVIiHjv52mf7rABBw4bpXDNl-DIwseQyOlBoA?e=toryF9", 'click here'), align = "center"),
+                        
+                        h3("ToMEx 1.0 Contributors", align = "center"), 
+                        
+                        p(align = "center", "Dr. Leah Thornton Hampton, Southern California Coastal Water Research Project"),
+                        
+                        p(align = "center", "Dr. Heili Lowman, University of Nevada Reno"),
+                        
+                        p(align = "center", "Dr. Scott Coffin, California State Water Resources Control Board"),
+                        
+                        p(align = "center", "Emily Darin, Southern California Coastal Water Research Project"),
+                        
+                        p(align = "center", "Dr. Ezra Miller, San Francisco Estuary Institute"),
+                        
+                        p(align = "center", "Dr. Ludovic Hermabessiere, University of Toronto"),
+                        
+                        p(align = "center", "Hannah De Frond, University of Toronto"),
+                        
+                        p(align = "center", "Vera de Ruitjer, Wageningen University"),
+                        
+                        p(align = "center", "Dr. Samreen Siddiqui, Oregon State University"),
+                        
+                        p(align = "center", "Andrea Faltynkova, Norwegian University of Science and Technology"),
+                        
+                        p(align = "center", "Johannes Völker, Norwegian University of Science and Technology"),
+                        
+                        p(align = "center", "Laura Monclús Anglada, Norwegian University of Science and Technology"),
+                        
+                        p(align = "center", "Sydney Kotar, Southern California Coastal Water Research Project"),
+                        
+                        p(align = "center", "Dr. Win Cowger, Moore Institute for Plastic Pollution Research"),
+                        
+                        p(align = "center", "Dr. Susanne Brander, Oregon State University"),
+                        
+                        p(align = "center", "Dr. Martin Wagner, Norwegian University of Science and Technology"),
+                        
+                        p(align = "center", "Dr. Bart Koelmans, Wageningen University"),
+                        
+                        p(align = "center", "Chelsea Rochman, University of Toronto"),
+                        
+                        p(align = "center", "Dr. Alvine Mehinto, Southern California Coastal Water Research Project"),
+                        
+                        p(align = "center", "Dr. Steve Weisberg, Southern California Coastal Water Research Project")), 
+              
+                    #Logos with links to organizations
+              box(status = "primary", width = 12, align = "center",  
+                  splitLayout(align = "center", 
+                  tags$a(href="https://www.waterboards.ca.gov", tags$img(src="waterboard.png", width = "100%", height = "100%")),
+                  tags$a(href="https://www.sccwrp.org", tags$img(src="sccwrp.png", width = "100%", height = "100%")),
+                  tags$a(href="https://www.utoronto.ca", tags$img(src="toronto.png", width = "100%", height = "100%")),
+                  tags$a(href="https://www.sfei.org/", tags$img(src="sfei.png", width = "100%", height = "100%")))),
+                  ),
+                  
+##### Overview UI #####
+
+tabItem(tabName = "Overview", 
+         
+        box(title = "Database Overview", status = "primary", width = 12, collapsible = TRUE,
+        
+        p("Select tabs below to explore the database. Each bar displays the total number of measured endpoints where a 
+          statistically signifcant effect was detected (Y) or where a measurement was made but a significant effect was not detected (N)."),
+        
+        br(),
+        
+        fluidRow(
+          tabBox(width = 12,
+            tabPanel("Organism Group", 
+                     plotOutput(outputId = "tax_plot"),
+                     ),
+            
+            tabPanel(div(HTML("<i>In vitro</i> vs <i>In vivo</i>")),
+                     plotOutput(outputId = "vivo_plot"),
+                     ),
+            
+            tabPanel("Life Stage",
+                     plotOutput(outputId = "life_plot"),
+                     ),
+            
+            tabPanel("Exposure Route",
+                     plotOutput(outputId = "exposure_plot"),
+                     ),
+            
+            tabPanel("Polymer Type",
+                     plotOutput(outputId = "polymer_plot"),
+                     ),
+            
+            tabPanel("Particle Morphology",
+                     plotOutput(outputId = "shape_plot"),
+                     ),
+            
+            tabPanel("Particle Size",
+                     plotOutput(outputId = "size_plot"),
+                     )),
+         
+            ), #close fluid row
+            ), #close box
+        
+        box(title = "Biological Endpoint Catgorization", status = "primary", width = 12, collapsible = TRUE,
+        
+        br(),
+        p("This plot displays the categorization of measured endpoints in the database. Nodes correspond to the Broad Endpoint Category, 
+        the Specific Endpoint Category, Endpoints and the level of biological organization from left to right. The widget 
+        below may be used to select endpoints at various Biological Levels of Organization. Click nodes to expand and collapse the plot."),
+        br(),
+            
+        fluidRow(
+          
+          column(width = 12,
+                 
+                 column(width = 3,
+                        pickerInput(inputId = "bio_check_endpoint", 
+                                    label = "Level of Biological Organization",
+                                    choices = levels(aoc_endpoint$bio_f),
+                                    selected = levels(aoc_endpoint$bio_f),
+                                    options = list(`actions-box` = TRUE),
+                                    multiple = TRUE)),
+          ), #closes out column
+          
+          column(width = 12,
+                 
+                 #Go button
+                 column(width = 3,
+                        actionButton("go_endpoint", "Plot Current Selection", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
+                 
+          ), #closes out column
+          
+          column(width = 12,
+          #collapsible tree plot
+          collapsibleTree::collapsibleTreeOutput("plot", height = "700px"),
+          
+          ), #closes out column
+          
+        ), #close fluid row
+        ), #close box
+      
+), #close tab
+
+
+##### Search UI #####
+
+tabItem(tabName = "Search",
+        
+        box(title = "Search Database", status = "primary", width = 12, height = "1000px",
+            
+            column(width = 3,
+                   downloadButton("download_search", "Download Selected Data (Excel File)", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+            
+            dataTableOutput("databaseDataTable", height = "600px")
+             
+         ), #close box
+        
+),#close search tab
+
+##### Screening UI #####
+
+tabItem(tabName = "Screening",
+        
+        box(title = "Data Selection", status = "primary", width = 12, collapsible = TRUE,
+            
+            shinyjs::useShinyjs(), # requires package for "reset" button, DO NOT DELETE - make sure to add any new widget to the reset_input in the server
+            id = "screen", # adds ID for resetting filters
+            
+            p("This plot displays scores from the quality screening exercise developed by", a(href ="https://pubs.acs.org/doi/abs/10.1021/acs.est.0c03057", 'de Ruijter et al. (2020)', .noOWs = "outside"), "with some modification.
+            If a single study received multiple scores within a category, the highest score is shown in the plot. 
+            For more information, including the scoring rubric used, see Resources."),
+            
+            fluidRow(
+              tabBox(width = 12, height = "200px",
+                     
+                     tabPanel("Data Type",
+                     
+                     "Only 'Particle Only' data are included in the study screening dataset."          
+                              
+                     ), #close tabpanel
+                     
+                     tabPanel("Effect", 
+                              
+                              #Broad endpoint selection
+                              column(width = 4,
+                                     pickerInput(inputId = "lvl1_quality", # endpoint checklist
+                                                 label = "Broad Endpoint Category:",
+                                                 choices = levels(aoc_quality$lvl1_f),
+                                                 selected = levels(aoc_quality$lvl1_f),
+                                                 options = list(`actions-box` = TRUE), # option to de/select all
+                                                 multiple = TRUE)), # allows for multiple inputs
+                              
+                              #Specific endpoint selection
+                              column(width = 4, #Specific endpoint selection
+                                     pickerInput(inputId = "lvl2_quality", 
+                                                  label = "Specific Endpoint Category:", 
+                                                  choices = levels(aoc_quality$lvl2_f),
+                                                  selected = levels(aoc_quality$lvl2_f),
+                                                  options = list(`actions-box` = TRUE),
+                                                  multiple = TRUE)),
+                              
+                              #Effect y/n selection
+                              column(width = 4,
+                                     pickerInput(inputId = "effect_quality", 
+                                                 label = "Effect:",
+                                                 choices = levels(aoc_quality$effect_f),
+                                                 selected = levels(aoc_quality$effect_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                     ), #close tabpanel
+                     
+                     tabPanel("Biology", 
+                              
+                              #organism group selection
+                              column(width = 4,
+                                     pickerInput(inputId = "organism_quality",
+                                                 label = "Organisms:",
+                                                 choices = levels(aoc_quality$org_f),
+                                                 selected = levels(aoc_quality$org_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE),
+                                     
+                                     #environment selection
+                                     pickerInput(inputId = "env_quality", 
+                                                 label = "Environment:",
+                                                 choices = levels(aoc_quality$env_f),
+                                                 selected = levels(aoc_quality$env_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                              
+                             #species selection
+                             column(width = 4,
+                                    pickerInput(inputId = "species_quality", 
+                                                label = "Species:", 
+                                                choices = levels(aoc_quality$species_f),
+                                                selected = levels(aoc_quality$species_f),
+                                                options = list(`actions-box` = TRUE),
+                                                multiple = TRUE), 
+                                     
+                                     #biological organization selection
+                                     pickerInput(inputId = "bio_quality", 
+                                                 label = "Biological Organization:",
+                                                 choices = levels(aoc_quality$bio_f),
+                                                 selected = levels(aoc_quality$bio_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                              #life stage selection
+                              column(width = 4,
+                                     pickerInput(inputId = "life_quality", 
+                                                 label = "Life Stages:",
+                                                 choices = levels(aoc_quality$life_f),
+                                                 selected = levels(aoc_quality$life_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE),     
+                                     
+                                     #exposure duration
+                                     pickerInput(inputId = "acute.chronic_quality", 
+                                                 label = "Exposure Duration:",
+                                                 choices = levels(aoc_quality$acute.chronic_f),
+                                                 selected = levels(aoc_quality$acute.chronic_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                     ), #close tabpanel
+                     
+                     tabPanel("Particles", 
+                              
+                              #polymer selection
+                              column(width = 4,
+                                     pickerInput(inputId = "poly_quality", 
+                                                 label = "Polymer:",
+                                                 choices = levels(aoc_quality$poly_f),
+                                                 selected = levels(aoc_quality$poly_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                              #shape selection
+                              column(width = 4,
+                                     pickerInput(inputId = "shape_quality", 
+                                                 label = "Shape:",
+                                                 choices = levels(aoc_quality$shape_f),
+                                                 selected = levels(aoc_quality$shape_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                              #size category selection
+                              column(width = 4,
+                                     pickerInput(inputId = "size_quality", 
+                                                 label = "Size Category:",
+                                                 choices = levels(aoc_quality$size_f),
+                                                 selected = levels(aoc_quality$size_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                     ), #close tabpanel
+                     
+                     tabPanel("Study Screening", 
+                              
+                              column(width = 12,
+                                     strong("Warning:"),"'Red criteria' do not represent full scoring criteria.",
+                                     br(),
+                                     br(),
+                              ), 
+                              
+                              #technical quality selection
+                              column(width = 4,
+                                     pickerInput(inputId = "tech_tier_zero_quality", 
+                                                 label = "Technical Criteria:",
+                                                 choices = levels(aoc_quality$tier_zero_tech_f),
+                                                 selected = levels(aoc_quality$tier_zero_tech_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                              #risk assessment quality selection
+                              column(width = 4,
+                                     pickerInput(inputId = "risk_tier_zero_quality", 
+                                                 label = "Risk Assessment Criteria:",
+                                                 choices = levels(aoc_quality$tier_zero_risk_f),
+                                                 selected = levels(aoc_quality$tier_zero_risk_f),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                              #specfic study
+                              column(width = 4,
+                                     pickerInput(inputId = "study_plus_quality", 
+                                                 label = "Study:",
+                                                 choices = levels(aoc_quality$Study_plus),
+                                                 selected = levels(aoc_quality$Study_plus),
+                                                 options = list(`actions-box` = TRUE),
+                                                 multiple = TRUE)),
+                              
+                     ) #close tabpanel
+                     
+              ), #close tab box
+            ), #close fluid row
+            
+            column(width = 3,
+                   actionButton("go_quality", "Plot Current Selection", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
+            
+            column(width = 3,
+                   actionButton("reset_quality", "Reset Filters", icon("redo"), style="color: #fff; background-color: #f39c12; border-color: #d68910")), 
+            
+        ), #close box
+        
+        box(title = "Barplot", status = "primary", width = 12, collapsible = T,
+            plotlyOutput("quality_barplotly", height = "700px"),
+            ),
+
+        box(title = "Heatmap", status = "primary", width = 12, collapsible = T,
+            
+            p("Use the cursor to zoom and hover over the plot to view additional information about each study. Some studies are not visible until zoomed in. 
+              Alternatively, specific studies may be selected using the filter in the 'Study Screening' tab above."),
+            br(),
+            p("'Red Criteria' (i.e., minimum criteria for risk assessment per", a(href = "https://microplastics.springeropen.com/articles/10.1186/s43591-022-00033-3", "Mehinto et al., (2022)"), ") are indicated by asterisks (*). Scores of 0 (Inadequate), 1 (Adequate with Restrictions), and 2 (Adequate) are respresented by red, grey, and blue tiles respectively."),
+            br(),
+            
+            plotlyOutput("tech_plotly", height = "800px"), 
+            
+            plotlyOutput("risk_plotly", height = "800px")
+               
+        ), #close box
+        
+), #closes out tab
+
+
+##### Exploration UI #####
+  
+tabItem(tabName = "Exploration",
+            
+         box(title = "Data Selection", status = "primary", width = 12, collapsible = TRUE,
+            
+             shinyjs::useShinyjs(), # requires package for "reset" button, DO NOT DELETE - make sure to add any new widget to the reset_input in the server
+             id = "exploration", # adds ID for resetting filters
+             
+         fluidRow(
+           tabBox(width = 12,
+             
+             tabPanel("Data Type",
+                      
+                  fluidRow(
+                      #Data type selection
+                      column(width = 4,
+                             pickerInput(inputId = "exp_type_check", 
+                             label = "Data Type:",
+                             choices = levels(aoc_setup$exp_type_f),
+                             selected = "Particle Only",
+                             options = list(`actions-box` = TRUE), 
+                             multiple = TRUE))), 
+                                 
+                      ), #close tabpanel
+             
+             tabPanel("Effect", 
+                      
+                  fluidRow(
+                      #Broad endpoint selection
+                      column(width = 4,
+                        pickerInput(inputId = "lvl1_check", # endpoint checklist
+                        label = "Broad Endpoint Category:",
+                        choices = levels(aoc_setup$lvl1_f),
+                        selected = levels(aoc_setup$lvl1_f),
+                        options = list(`actions-box` = TRUE), # option to de/select all
+                        multiple = TRUE)), # allows for multiple inputs
+                      
+                      #Specific endpoint selection
+                      column(width = 4,
+                        pickerInput(inputId = "lvl2_check", 
+                        label = "Specific Endpoint Category:", 
+                        choices = levels(aoc_setup$lvl2_f),
+                        selected = levels(aoc_setup$lvl2_f),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE)),
+                      
+                      #Effect y/n selection
+                      column(width = 4,
+                        pickerInput(inputId = "effect_check", 
+                        label = "Effect:",
+                        choices = levels(aoc_setup$effect_f),
+                        selected = levels(aoc_setup$effect_f),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE))),
+                      
+                      ), #close tabpanel
+             
+             tabPanel("Biology", 
+                      
+                   fluidRow(
+                      #organism group selection
+                      column(width = 4,
+                        pickerInput(inputId = "organism_check",
+                        label = "Organisms:",
+                        choices = levels(aoc_setup$org_f),
+                        selected = levels(aoc_setup$org_f),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE),
+                      
+                      #environment selection
+                        pickerInput(inputId = "env_check", 
+                        label = "Environment:",
+                        choices = levels(aoc_setup$env_f),
+                        selected = levels(aoc_setup$env_f),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE)),
+                      
+                      #species selection
+                      column(width = 4,
+                      pickerInput(inputId = "species_check", 
+                                  label = "Species:", 
+                                  choices = levels(aoc_setup$species_f),
+                                  selected = levels(aoc_setup$species_f),
+                                  options = list(`actions-box` = TRUE),
+                                  multiple = TRUE),
+                        
+                      #biological organization selection
+                        pickerInput(inputId = "bio_check", 
+                        label = "Biological Organization:",
+                        choices = levels(aoc_setup$bio_f),
+                        selected = levels(aoc_setup$bio_f),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE)),
+                        
+                      #life stage selection
+                      column(width = 4,
+                         pickerInput(inputId = "life_check", 
+                         label = "Life Stages:",
+                         choices = levels(aoc_setup$life_f),
+                         selected = levels(aoc_setup$life_f),
+                         options = list(`actions-box` = TRUE),
+                         multiple = TRUE),     
+                      
+                      #exposure duration
+                         pickerInput(inputId = "acute.chronic_check", 
+                         label = "Exposure Duration:",
+                         choices = levels(aoc_setup$acute.chronic_f),
+                         selected = levels(aoc_setup$acute.chronic_f),
+                         options = list(`actions-box` = TRUE),
+                         multiple = TRUE))),
+                      
+                      ), #close tabpanel
+             
+             tabPanel("Particles", 
+                      
+                  fluidRow(
+                      #polymer selection
+                      column(width = 4,
+                        pickerInput(inputId = "poly_check", 
+                        label = "Polymer:",
+                        choices = levels(aoc_setup$poly_f),
+                        selected = setdiff(levels(aoc_setup$poly_f), "Not Reported"),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE)),
+                        
+                      #shape selection
+                      column(width = 4,
+                        pickerInput(inputId = "shape_check", 
+                        label = "Shape:",
+                        selected = setdiff(levels(aoc_setup$shape_f), "Not Reported"),
+                        choices = levels(aoc_setup$shape_f),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE)),
+                      
+                      #size category selection
+                      column(width = 4,
+                        pickerInput(inputId = "size_check", 
+                        label = "Size Category:",
+                        choices = levels(aoc_setup$size_f),
+                        selected = c("1µm < 100µm", "100µm < 1mm", "1mm < 5mm"),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE))),
+
+                      ), #close tabpanel
+           
+             tabPanel("Study Screening", 
+                      
+                  fluidRow(    
+                      column(width = 12,
+                         strong("Warning:"),"Only 'Particle Only' data are included in the study screening dataset.", 
+                         br(),
+                         "'Red criteria' do not represent full scoring criteria. Additional scoring criteria may be downloaded via the Search tab or visualized via the Study Screening tab.",
+                         br(),
+                         br(),
+                         ),          
+                      
+                      #technical quality selection
+                      column(width = 4,
+                        pickerInput(inputId = "tech_tier_zero_check", 
+                        label = "Technical Criteria:",
+                        choices = levels(aoc_setup$tier_zero_tech_f),
+                        selected = levels(aoc_setup$tier_zero_tech_f),
+                        options = list(`actions-box` = TRUE),
+                        multiple = TRUE)),
+                      
+                      #risk assessment quality selection
+                      column(width = 4,
+                            pickerInput(inputId = "risk_tier_zero_check", 
+                            label = "Risk Assessment Criteria:",
+                            choices = levels(aoc_setup$tier_zero_risk_f),
+                            selected = levels(aoc_setup$tier_zero_risk_f),
+                            options = list(`actions-box` = TRUE),
+                                         multiple = TRUE))),
+                  
+                      ), #close tabpanel
+             
+             tabPanel("Dose Metric",
+                      
+                  fluidRow(
+                       column(width = 4,
+
+                              radioButtons(inputId = "dose_check", 
+                              label = "Dose Metric:",
+                              choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL", 
+                                          "Particles/kg sediment (dry weight)", "mg/kg sediment (dry weight)", "µm3/kg sediment (dry weight)", "µm2/kg sediment (dry weight)", "µm2/µg/kg sediment (dry weight)"),
+                              selected = "µg/mL")),
+
+                      
+                       column(width = 8,
+
+                              radioButtons(inputId = "Rep_Con_rad",
+                              label = "Do you want to use just the reported, just the converted, or all exposure concentrations?",
+                              choices = c("reported", "converted", "all"),
+                              selected = "all"))),
+                      
+                      ), #close tabpanel
+             
+             tabPanel("Aesthetics", 
+                      
+                  fluidRow(    
+                      column(width = 4,
+                             selectInput(inputId = "plot.type", "Plot Type:",
+                                         list(boxplot = "boxplot", violin = "violin", beeswarm = "beeswarm"))),
+                             # checkboxInput(inputId = "show.points", "Show All Points", FALSE)),
+                      
+                      column(width = 4,
+                             selectInput(inputId = "theme.type_exp", "Dark or Light Mode:",
+                                         list(light = "light", dark = "dark"))),
+                      
+                      column(width = 4,
+                             selectInput(inputId = "color.type_exp", "Color Theme:",
+                                         list(default = "default", viridis = "viridis", brewer = "brewer", tron = "tron", locusZoom = "locusZoom", d3 = "d3", Nature = "Nature", JAMA = "JAMA")))),
+                      
+             ), #close tabpanel
+             
+             tabPanel("Alignment (Advanced)", height = "600px",
+                      
+                fluidRow(
+                      column(width = 12,
+                      p("A monodisperse effect concentration (e.g. 5 micron spheres) may be re-scaled to a default size range (e.g. 1 - 5,000 microns) using methods described in", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)"), "Re-scaling to a default size range allows direct comparison to exposure concentrations for a default size range (which may also be re-scaled). The following radio buttons apply corrections for bioavailability (i.e. limiting available particles to max ingestable size), and a further correction for the ecologically relevant metric (ERM). For a given ERM, the threshold may be related to both mono- or polydisperse particles interchangeably so long as the total magnitude of ERM remains the same (Koelmans et al, 2020). If, for example, 'volume' is chosen below as an ERM, the monodisperse effect concentration is first corrected for bioavailability and aligned to whichever default size range the user chooses below. This aligned threshold (in particles/mL) is then multiplied by a correction for polydisperse volume based on the average volumes for the given range of microplastics in the environment.", strong("Only 'Particle Only' data are available for alignment."))),
+                      br(),
+                      
+                      #ERM Checkbox
+                      column(width = 12,
+                             radioButtons(inputId = "ERM_check", # ERM (particle, surface area, mass, volume, specific surface area)
+                                          label = "Ecologically Relevant Metric:",
+                                          choices = c("Unaligned","Particles", "Surface Area", "Volume", "Mass", "Specific Surface Area"),
+                                          selected = "Unaligned")),
+                      
+                      # Conditional Panel: Show all other inputs only if ERM_check is NOT "Unaligned"
+                      conditionalPanel(
+                        condition = "input.ERM_check != 'Unaligned'",
+                        
+                        
+                      column(width = 12,
+                             strong("Starting alpha values are for marine surface water reported in ", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)")),
+                             br(),
+                             br()),
+                      
+                      column(width = 12,
+                             radioButtons(inputId = "alpha.value.matrix",
+                                          label = "Alpha Values by Environmental Compartment:",
+                                          choices = c("Marine Surface Water", "Freshwater Surface Water", "Marine Sediment", "Freshwater Sediment"),
+                                          selected = "Marine Surface Water")),
+                      
+                      #Alpha checkbox
+                      column(width = 4,
+                             numericInput(inputId = "alpha",
+                                          label = "Length Alpha Value",
+                                          value = 2.07,
+                                          step = 0.01)),
+                      
+                      #Alpha surface area input
+                      column(width = 4,
+                             numericInput(inputId = "a.sa",
+                                          label = "Surface Area Alpha Value",
+                                          value = 1.50,
+                                          step = 0.01)),
+                      
+                      #Alpha volume input
+                      column(width = 4,
+                             numericInput(inputId = "a.v",
+                                          label = "Volume Alpha Value",
+                                          value = 1.48,
+                                          step = 0.01)),
+                      
+                      #Alpha mass input
+                      column(width = 4,
+                             numericInput(inputId = "a.m",
+                                          label = "Mass Alpha Value",
+                                          value = 1.32,
+                                          step = 0.01)),
+                      
+                      #Alpha ssa input
+                      column(width = 4,
+                             numericInput(inputId = "a.ssa",
+                                          label = "Specific Surface Area Alpha Value",
+                                          value = 1.98,
+                                          step = 0.01)),
+                      
+                      #average width to length ratio
+                      column(width = 4,
+                             numericInput(inputId = "R.ave",
+                                          label = "Average Particle Width to Length Ratio",
+                                          value = 0.77,
+                                          step = 0.01)),
+                      
+                      #average density
+                      column(width = 4,
+                             numericInput(inputId = "p.ave",
+                                          label = "Average Particle Density (g/cm^3)",
+                                          value = 1.10,
+                                          step = 0.01)),
+                      # average height to width ratio
+                      column(width = 4,
+                             numericInput(inputId = "H_W_ratio",
+                                          label = "Average Particle Height to Width Ratio",
+                                          value = 0.67,
+                                          step = 0.01)),
+                      
+                      # lower length input
+                      column(width = 4,
+                             numericInput(inputId = "lower_length",
+                                          label = "Lower Length for Default Size Range (µm)",
+                                          value = 1)),
+                      # upper length input
+                      column(width = 4,
+                             numericInput(inputId = "upper_length",
+                                          label = "Upper Length for Default Size Range (µm)",
+                                          value = 5000)),
+                      
+                      # Switch to choose what determines bioaccessibility
+                      column(width = 5,
+                             radioButtons(inputId = "ingestion.translocation.switch",
+                                          label = "Bioaccessibility limited by tissue translocation (fixed) or mouth size opening (species-dependent)?",
+                                          choices = list(
+                                            "Restricted by ingestion (species-specific)" = "ingestion",
+                                            "Restricted by translocation (user-set value or max size ingest- whichever is smaller)" = "translocation"#,
+                                          #  "No restriction for bioaccessibility" = "none"
+                                          ),
+                                          selected = "ingestion"
+                                          )),
+                      
+                      # Tissue translocation size limit (if applicable)
+                      column(width = 7,
+                             numericInput(inputId = "upper.tissue.trans.size.um",
+                                                  label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
+                                                  value = 88))),
+                ) #Close COnditionalPaneel
+                      
+             ) #close tabpanel  
+             
+         ), #close tab box
+         ), #close fluid row
+         
+         column(width = 3,
+                actionButton("go", "Plot Current Selection", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
+         
+         column(width = 3,
+                actionButton("reset_input", "Reset Filters", icon("redo"), style="color: #fff; background-color: #f39c12; border-color: #d68910")), 
+         
+         column(width = 3,
+                downloadButton("downloadData", "Download Data (Excel File)", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+         
+         ), #close box
+        
+        box(title = "Data Visualization", status = "primary", width = 12,
+            
+            fluidRow(
+              tabBox(width = 12,
+                     
+                     tabPanel("Organism Group",
+                      
+                      fluidRow(
+                        column(width = 12,      
+                        plotOutput(outputId = "organism_plot_react", height = "600px")),
+                        
+                        column(width = 3,
+                               downloadButton("downloadexploration_org", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))),
+                     
+                     ),#closes tab panel
+                     
+                     
+                     tabPanel("Broad Endpoint Category",
+                      
+                      fluidRow(
+                        column(width = 12,      
+                        plotOutput(outputId = "lvl_plot_react", height = "600px")),
+                        
+                        column(width = 3,
+                               downloadButton("downloadexploration_lvl1", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))),
+                              
+                     ),#closes tab panel
+                     
+                     tabPanel("Specific Endpoint Category", 
+                      
+                      fluidRow(  
+                      column(width = 12,
+                          plotOutput(outputId = "lvl2_plot_react", height = "auto")),
+                      
+                      column(width = 3,
+                             downloadButton("downloadexploration_lvl2", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))),
+                              
+                     ),#closes tab panel
+                     
+                     tabPanel("Size",
+                        
+                        fluidRow(
+                        column(width = 12,      
+                        plotOutput(outputId = "size_plot_react", height = "600px")),
+                        
+                        column(width = 3,
+                               downloadButton("downloadexploration_size", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))),
+                              
+                     ),#closes tab panel
+                     
+                     tabPanel("Shape",
+                        
+                        fluidRow(
+                        column(width = 12,      
+                        plotOutput(outputId = "shape_plot_react", height = "600px")),
+                        
+                        column(width = 3,
+                               downloadButton("downloadexploration_shape", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))),
+                              
+                     ),#closes tab panel
+                     
+                     tabPanel("Polymer",
+                              
+                        fluidRow(
+                        column(width = 12,      
+                        plotOutput(outputId = "poly_plot_react", height = "600px")),
+                        
+                        column(width = 3,
+                               downloadButton("downloadexploration_poly", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))),
+                              
+                     ),#closes tab panel
+              br(),       
+              p("Data labels on the far right of each plot represent the number of measurements and studies, respectively.")
+
+            ), #closes tab box
+            ), #closes fluid tab
+            ), #closes box
+              
+        ), #closes out exploration tab
+
+##### SSD UI #####
+
+tabItem(tabName = "SSD", 
+        
+        box(title = "Data Selection", status = "primary", width = 12, collapsible = TRUE,
+            
+            
+           
+            p("Species sensitivity distributions (SSDs) are cumulative probability distributions that estimate the percent of species affected by a given concentration of exposure using Maximum Likelihood and model averaging. A useful metric often used for setting risk-based thresholds is the concentration that affects 5% of the species, the 5% Hazard Concentration (HC). For more information on SSDs, refer to", a(href = "https://bit.ly/2Hy4q10", 'Posthuma, Suter II, and Traas (2001).')),
+            br(),
+             
+            fluidRow(
+              tabBox(width = 12, 
+                     
+                     tabPanel("Data Type",
+                              
+                    shinyjs::useShinyjs(), # requires package for "reset" button, DO NOT DELETE - make sure to add any new widget to the reset_input in the server
+                    id = "ssd", # adds ID for resetting filters
+                          
+                        fluidRow(    
+                          #Data type selection
+                          column(width = 4,
+                                 pickerInput(inputId = "exp_type_check_ssd", 
+                                 label = "Data Type:",
+                                 choices = levels(aoc_z$exp_type_f),
+                                 selected = "Particle Only",
+                                 options = list(`actions-box` = TRUE), 
+                                 multiple = TRUE))), 
+                              
+                     ), #close tabpanel  
+                     
+                     tabPanel("Effect",
+                            
+                         fluidRow(  
+                           column(width = 4,
+                                  #Broad endpoint category selection
+                                  pickerInput(inputId = "lvl1_check_ssd", 
+                                  label = "Broad Endpoint Category:",
+                                  choices = levels(aoc_z$lvl1_f),
+                                  selected = levels(aoc_z$lvl1_f),
+                                  options = list(`actions-box` = TRUE), 
+                                  multiple = TRUE)),  
+                           
+                           column(width = 4,
+                                  #Specific endpoint category selection
+                                  pickerInput(inputId = "lvl2_check_ssd", 
+                                  label = "Specific Endpoint Category:",
+                                  choices = levels(aoc_z$lvl2_f),
+                                  selected = levels(aoc_z$lvl2_f),
+                                  options = list(`actions-box` = TRUE), 
+                                  multiple = TRUE))), 
+                              
+                     ), #close tabpanel 
+                     
+                     tabPanel("Biology",
+                        
+                         fluidRow( 
+                           column(width = 4,
+                                  #Organism group selection
+                                  pickerInput(inputId = "Group_check_ssd", 
+                                  label = "Organism Group:",
+                                  choices = levels(aoc_z$Group),
+                                  selected = c("Annelida", "Algae", "Cnidaria", "Crustacea", "Echinoderm", "Fish", "Insect", "Mixed", "Mollusca", "Rotifera", "Dinoflagellate", "Ciliophora"),
+                                  options = list(`actions-box` = TRUE), 
+                                  multiple = TRUE),
+                                  
+                                  #Environment selection
+                                  pickerInput(inputId = "env_check_ssd", 
+                                  label = "Environment:",
+                                  choices = levels(aoc_z$env_f),
+                                  selected = c("Marine", "Freshwater"),
+                                  options = list(`actions-box` = TRUE), 
+                                  multiple = TRUE)), 
+
+                           
+                           column(width = 4,
+                                  #Species selection
+                                  pickerInput(inputId = "Species_check_ssd", 
+                                  label = "Species:",
+                                  choices = levels(aoc_z$Species),
+                                  selected = levels(aoc_z$Species),
+                                  options = list(`actions-box` = TRUE), 
+                                  multiple = TRUE),
+
+                                  #level of biological organization selection
+                                 pickerInput(inputId = "bio_check_ssd", 
+                                 label = "Biological Organization:",
+                                 choices = levels(aoc_z$bio_f),
+                                 selected = levels(aoc_z$bio_f),
+                                 options = list(`actions-box` = TRUE), 
+                                 multiple = TRUE)),
+
+                           
+                           column(width = 4,
+                                  #acute/chronic selection
+                                  pickerInput(inputId = "acute.chronic_check_ssd", 
+                                  label = "Exposure Duration Type:",
+                                  choices = levels(aoc_z$acute.chronic_f),
+                                  selected = levels(aoc_z$acute.chronic_f),
+                                  options = list(`actions-box` = TRUE),
+                                  multiple = TRUE))),
+                              
+                     ), #close tabpanel 
+                     
+                     tabPanel("Particles",
+                             
+                        fluidRow(       
+                          column(width = 4,
+                                 #polymer selection
+                                 pickerInput(inputId = "poly_check_ssd", 
+                                 label = "Polymer:",
+                                 choices = levels(aoc_z$poly_f),
+                                 selected = setdiff(levels(aoc_z$poly_f), "Not Reported"),
+                                 options = list(`actions-box` = TRUE), 
+                                 multiple = TRUE)),
+                              
+                          column(width = 4,
+                                  #shape selection
+                                 pickerInput(inputId = "shape_check_ssd", 
+                                 label = "Shape:",
+                                 choices = levels(aoc_z$shape_f),
+                                 selected = setdiff(levels(aoc_z$shape_f), "Not Reported"),
+                                 options = list(`actions-box` = TRUE), 
+                                 multiple = TRUE)), 
+                          
+                          column(width = 4,
+                                  #particle size selection
+                                  pickerInput(inputId = "size_check_ssd", 
+                                  label = "Size Category:",
+                                  choices = levels(aoc_z$size_f),
+                                  selected = c("1µm < 100µm", "100µm < 1mm", "1mm < 5mm"),
+                                  options = list(`actions-box` = TRUE), 
+                                  multiple = TRUE))), 
+                              
+                     ), #close tabpanel 
+                     
+                     tabPanel("Study Screening",
+                          
+                        fluidRow(      
+                          column(width = 12,
+                                 strong("Warning:"),"Only 'Particle Only' data are included in the study screening dataset.", 
+                                 br(),
+                                 "'Red criteria' do not represent full scoring criteria. Additional scoring criteria may be downloaded via the Search tab or visualized via the Study Screening tab.",
+                                 br(),
+                                 br(),
+                          ),  
+                              
+                          column(width = 4,    
+                                  #technical criteria selection
+                                  pickerInput(inputId = "tech_tier_zero_check_ssd", 
+                                  label = "Technical Criteria:",
+                                  choices = levels(aoc_z$tier_zero_tech_f),
+                                  selected = "Red Criteria Passed",
+                                  options = list(`actions-box` = TRUE),
+                                  multiple = TRUE)),
+                          
+                          column(width = 4,
+                                 #technical criteria selection
+                                 pickerInput(inputId = "risk_tier_zero_check_ssd", 
+                                 label = "Risk Assessment Criteria:",
+                                 choices = levels(aoc_z$tier_zero_risk_f),
+                                 selected = "Red Criteria Passed",
+                                 options = list(`actions-box` = TRUE),
+                                 multiple = TRUE))),
+
+                     ), #close tabpanel 
+                     
+                     tabPanel("Dose Metric",
+                         
+                        fluidRow(           
+                          column(width = 4,
+                                 radioButtons(inputId = "dose_check_ssd", 
+                                 label = "Dose Metric:",
+                                 choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL",
+                                             "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
+                                             #"Particles/kg sediment (dry weight)", "mg/kg sediment (dry weight)", "µm3/kg sediment (dry weight)", "µm2/kg sediment (dry weight)", "µm2/µg/kg sediment (dry weight)"),
+                                 selected = "Particles/mL"),
+                                 p("Note that sediments are in dry weight.")
+                                 ),
+
+                          
+                          column(width = 8,
+                                 radioButtons(
+                                 inputId = "Reported_Converted_rad",
+                                 label = "Do you want to use just the reported, just the converted, or all exposure concentrations?",
+                                 choices = list("reported", "converted", "all"),
+                                 selected = "all"))),
+                     ), #close tabPanel
+                    
+                     tabPanel("Alignment (Advanced)",
+                          
+                        fluidRow(
+                          column(width = 12,
+                             p("A monodisperse effect concentration (e.g. 5 micron spheres) may be re-scaled to a default size range (e.g. 1 - 5,000 microns) using methods described in", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)"), "Re-scaling to a default size range allows direct comparison to exposure concentrations for a default size range (which may also be re-scaled). The following radio buttons apply corrections for bioavailability (i.e. limiting available particles to max ingestable size), and a further correction for the ecologically relevant metric (ERM). For a given ERM, the threshold may be related to both mono- or polydisperse particles interchangeably so long as the total magnitude of ERM remains the same (Koelmans et al, 2020). If, for example, 'volume' is chosen below as an ERM, the monodisperse effect concentration is first corrected for bioavailability and aligned to whichever default size range the user chooses below. This aligned threshold (in particles/mL) is then multiplied by a correction for polydisperse volume based on the average volumes for the given range of microplastics in the environment.", strong("Only 'Particle Only' data are available for alignment."))),
+                             br(),
+                             
+                                    #ERM Checkbox
+                                    column(width = 12,
+                                           radioButtons(inputId = "ERM_check_ssd", # ERM (particle, surface area, mass, volume, specific surface area)
+                                                        label = "Ecologically Relevant Metric:",
+                                                        choices = c("Unaligned","Particles", "Surface Area", "Volume", "Mass", "Specific Surface Area"),
+                                                        selected = "Volume")),
+                          # Conditional Panel: Show all other inputs only if ERM_check is NOT "Unaligned"
+                          conditionalPanel(
+                            condition = "input.ERM_check_ssd != 'Unaligned'",
+                          
+                                    column(width = 12,
+                                    strong("Starting alpha values are for marine surface water reported in ", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)")),
+                                    br(),
+                                    br()),
+                          
+                                 column(width = 12,
+                                 radioButtons(inputId = "alpha.value.matrix_ssd",
+                                              label = "Alpha Values by Environmental Compartment:",
+                                              choices = c("Marine Surface Water", "Freshwater Surface Water", "Marine Sediment", "Freshwater Sediment"),
+                                              selected = "Marine Surface Water")),
+                             
+                                    #Alpha checkbox
+                                    column(width = 3,
+                                           numericInput(inputId = "alpha_ssd",
+                                                        label = "Length Alpha Value",
+                                                        value = 2.07,
+                                                        step = 0.01)),
+                                    
+                                    #Alpha surface area input
+                                    column(width = 3,
+                                           numericInput(inputId = "a.sa_ssd",
+                                                        label = "Surface Area Alpha Value",
+                                                        value = 1.50,
+                                                        step = 0.01)),
+                                    
+                                    #Alpha volume input
+                                    column(width = 3,
+                                           numericInput(inputId = "a.v_ssd",
+                                                        label = "Volume Alpha Value",
+                                                        value = 1.48,
+                                                        step = 0.01)),
+                                    
+                                    #Alpha mass input
+                                    column(width = 3,
+                                           numericInput(inputId = "a.m_ssd",
+                                                        label = "Mass Alpha Value",
+                                                        value = 1.32,
+                                                        step = 0.01)),
+                                    
+                                    #Alpha ssa input
+                                    column(width = 3,
+                                           numericInput(inputId = "a.ssa_ssd",
+                                                        label = "Specific Surface Area Alpha Value",
+                                                        value = 1.98,
+                                                        step = 0.01)),
+                                    
+                                    #average width to length ratio
+                                    column(width = 3,
+                                           numericInput(inputId = "R.ave_ssd",
+                                                        label = "Average Particle Width to Length Ratio",
+                                                        value = 0.77,
+                                                        step = 0.01)),
+                                    
+                                    #average density
+                                    column(width = 3,
+                                           numericInput(inputId = "p.ave_ssd",
+                                                        label = "Average Particle Density (g/cm^3)",
+                                                        value = 1.10,
+                                                        step = 0.01)),
+                            ### Height to width ratio
+                            column(width = 3,
+                                   numericInput(inputId = "H_W_ratio_ssd",
+                                                label = "Average Particle Height to Width Ratio",
+                                                value = 0.67,
+                                                step = 0.01)),
+                                    
+                                    # lower length input
+                                    column(width = 4,
+                                           numericInput(inputId = "lower_length_ssd",
+                                                        label = "Lower Length for Default Size Range (µm)",
+                                                        value = 1)),
+                                    # upper length input
+                                    column(width = 4,
+                                           numericInput(inputId = "upper_length_ssd",
+                                                        label = "Upper Length for Default Size Range (µm)",
+                                                        value = 5000)),
+                          
+                          # Switch to choose what determines bioaccessibility
+                          column(width = 5,
+                                 radioButtons(inputId = "ingestion.translocation.switch_ssd",
+                                              label = "Bioaccessibility limited by tissue translocation (fixed) or mouth size opening (species-dependent)?",
+                                              choices = list(
+                                                "Restricted by ingestion (species-specific)" = "ingestion",
+                                                "Restricted by translocation (user-set value or max size ingest- whichever is smaller)" = "translocation"#,
+                                                #"No restriction for bioaccessibility" = "none"
+                                              ),
+                                              selected = "ingestion")),
+                          
+                          # Tissue translocation size limit (if applicable)
+                          column(width = 7,
+                                 numericInput(inputId = "upper.tissue.trans.size.um_ssd",
+                                              label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
+                                              value = 88))
+                          ) # close fluidrow
+                        ) #Close ConditionalPanel
+                          
+                     ), #close tabpanel  
+                     
+                     tabPanel("SSD Options (Advanced)",
+                          
+                        fluidRow(
+                          column(width = 12,
+                            p("The choice of effect metrics (e.g., NOEC, LOEC, HONEC, ECXX and LCXX) should be carefully considered. Assessment factors are available for converting acute exposures to chronic exposure and estimating NOECs from other effect metrics (e.g. LOEC's), according to the methods described in ", a(href = "https://setac.onlinelibrary.wiley.com/doi/epdf/10.1002/ieam.4214", 'Wigger et al (2020).'), "In brief, an assessment factor of 10 is applied to convert LC/EC25-50 to NOEC, 2 to convert EC/LC20, LOEC, or MIC to NOEC. LC10, EC10 and HONEC are considered equivalent to LOEC. An assessment factor of 10 is applied to convert acute-to-chronic, with determinations of such categories dependent on taxa, as defined in the reference.")),
+                               
+                          #Effect metric widget
+                          column(width = 6,
+                                 pickerInput(inputId = "effect.metric_rad_ssd", 
+                                 label = "Effect Metric:",
+                                 choices = levels(aoc_z$effect.metric),
+                                 selected = c("EC10","EC50","EMT50", "IC50","LC50","LOEC", "NOEC", "LC20", "EC20"),
+                                 options = list(`actions-box` = TRUE),
+                                 multiple = TRUE), 
+                          
+                          #Assessment factor - time
+                                 pickerInput(inputId = "AF.time_rad_ssd", 
+                                 label = "Apply Assessment Factor for acute and sub-chronic to chronic?",
+                                 choices = c("Yes", "No"),
+                                 options = list(`actions-box` = TRUE),
+                                 selected = "Yes")),
+                          
+                          #Assessment factor - noec conversion
+                          column(width = 6,
+                                 pickerInput(inputId = "AF.noec_rad_ssd", # noec/loc assessment factor
+                                 label = "Apply Assessment Factor to convert effect metrics to NOECs?",
+                                 choices = c("Yes", "No"),
+                                 options = list(`actions-box` = TRUE),
+                                 selected = "Yes"),
+                          
+                          #concentration selector (minimum, lower 95% CI, median, mean)
+                                 pickerInput(
+                                 inputId = "conc.select.rad",
+                                 label = "What summary statistic should be used for each species?",
+                                 choices = list("Minimum", "Lower 95% CI", "1st Quartile", "Median", "Mean", "Geometric Mean", "3rd Quartile", "Upper 95% CI", "Maximum"),
+                                 selected = "1st Quartile"))),
+                              
+            ) #close tabpanel  
+            ), #closes out tabbox
+            ), #closes out fluidrow
+            
+            column(width = 3,
+                   actionButton("SSDgo", "Submit Current Selection", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
+            
+            column(width = 3,
+                   actionButton("reset_ssd", "Reset Filters", icon("redo"), style="color: #fff; background-color: #f39c12; border-color: #d68910")), 
+            
+            column(width = 3,
+                   downloadButton("downloadData_ssd", "Download Raw Data (Excel File)", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+            
+        ), #closes out box #1
+
+        box(title = "Selected Data Summary", status = "primary", width = 12, collapsible = TRUE,
+        
+            fluidRow(
+            
+            column(width = 12,
+            DT::dataTableOutput(outputId = "aoc_filter_ssd_table")),
+            
+            ), #closes out fluidrow
+            
+        ), #closes out box #2
+        
+        box(title = "SSD Results: Plot", status = "primary", width = 12, collapsible = TRUE,
+            
+            column(width = 3,
+                   actionButton("ssdPred", "Predict SSD", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
+                br(),
+            
+            fluidRow(
+            
+              column(width = 12,
+                
+              #  plotOutput(outputId = "aoc_ssd_ggplot", height = "500px", hover = hoverOpts(id = "plot_hover")), verbatimTextOutput("info"),
+              plotlyOutput("aoc_ssd_plotly"),
+                br(),
+                
+              p("The model-averaged 95% confidence interval is indicated by the shaded band and the model-averaged Hazard Concentration by the dotted line.")),
+              br(),  
+            
+            column(width = 12,
+                   p("Further customization of downloadable plot is available here:"),
+            column(width = 3,
+                   selectInput(inputId = "theme.type", "Dark or Light Mode:",
+                               list(light = "light", dark = "dark"))),
+
+            column(width = 3,
+                   selectInput(inputId = "color.type", "Color Theme:",
+                               list(viridis = "viridis", brewer = "brewer", tron = "tron", locusZoom = "locusZoom", d3 = "d3", Nature = "Nature", JAMA = "JAMA")))),
+            column(width = 12,
+            column(width = 3,
+                   downloadButton("downloadSsdPlot", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))),
+                   
+            ),#closes out fluidrow    
+            
+        ), #closes out box #3
+        
+        box(title = "SSD Results: Table", status = "primary", width = 12, collapsible = TRUE, height = "675px",
+            
+            DT::dataTableOutput(outputId = "ssd_pred_table", height = "500px"),
+           
+        ), #closes out box #4   
+            
+        box(title = "Model Selections (Advanced)", status = "primary", width = 12, collapsible = TRUE, collapsed = TRUE,
+          
+            p("The figure below displays minimum observed effect concentrations for a range of species along with three common distributions."),
+            br(),
+            plotOutput(outputId = "autoplot_dists_react"),
+            p("Different distributions can be fit to the data. Below are some common distributions (llogis = log-logistic; lnorm = log-normal; lgumbel = log-Gumbel)."),
+            br(),
+            DT::dataTableOutput(outputId = "table_gof_react"), #using DT package provides better functionality
+            br(),
+            p("The best fitting model is that with the smallest Information Criteria value. Note that several informaiton criteria are listed ", a(href ="http://a100.gov.bc.ca/appsdata/acat/documents/r57400/2_1568399094009_8398900200.pdf", 'Schwarz and Tillmanns (2019)', .noOWs = "outside"),"."),
+            br(),
+            p("Following ", a(href ="https://books.google.com/books?id=c45qtw7tDrsC&lpg=PA113&ots=Zn9Neau5aM&dq=burnham%20and%20anderson%20(2002)%20species%20sensitivity&lr&pg=PA113#v=onepage&q&f=false", 'Burnham and Anderson (2002)', .noOWs = "outside"),", the aicc is recommended for model selection (for which the lowest value is the best fitting model), and is the default information criteria used to predict confidence intervals (unless otherwise specified below). Options inlcude aicc (Akaike's Information Criteria Corrected for sample size; default), aic (Akaike's Information Criteria), or bic (Bayseian Information Criteria). Choose the information criteria used to estimate confidence intervals below:"),
+            br(),
+            column(width = 4,
+                   pickerInput(inputId = "pred_ic_ssd", # prediction model averaging checklist
+                               label = "Information Criteria:",
+                               choices = c("aicc", "aic", "bic"), #tells the model which information criteria to use to select best fit
+                               selected = "aicc",
+                               options = list(`actions-box` = FALSE), # option to de/select all
+                               multiple = FALSE)),
+            br(),
+            column(width = 12,
+            p("Understanding that other distributions may fit the data almost as well as the 'best' distribution (as evidenced by delta values <2), it is recommended to average such fits based on the relative aicc weights of the distributions (indicated by the weight column in the goodness of fit table) ", a(href ="https://books.google.com/books?id=c45qtw7tDrsC&lpg=PA113&ots=Zn9Neau5aM&dq=burnham%20and%20anderson%20(2002)%20species%20sensitivity&lr&pg=PA113#v=onepage&q&f=false", 'Burnham and Anderson (2002)', .noOWs = "outside"),". Below, choose whether or not multiple distributions should be averaged (weighted according to above table) or if a single distribution should be used.")),
+            br(),
+            column(width = 4,
+                   pickerInput(inputId = "pred_ave_ssd", # prediction model averaging checklist
+                               label = "Averaging:",
+                               choices = c("TRUE", "FALSE"), #tells the model to average or not
+                               selected = NULL,
+                               options = list(`actions-box` = FALSE), # option to de/select all
+                               multiple = FALSE)),
+            br(),
+            column(width = 12,
+            conditionalPanel("input.pred_ave_ssd == 'FALSE'",
+                             p("Choose which distribution will be plotted (llogis = log-logistic; lnorm = log-normal; lgumbel = log-Gumbel):"),
+                             pickerInput(inputId = "dist",
+                                         label = "Distribution:",
+                                         choices = c("weibull",
+                                                     "llogis", 
+                                                     "lnorm", 
+                                                     "gamma",
+                                                     "lgumbel"),
+                                         selected = NULL,
+                                         options = list(`actions-box` = FALSE), # option to de/select all
+                                         multiple = FALSE))),
+            br(),
+            
+            column(width = 4,
+            numericInput(inputId = "pred_hc_ssd", #hazard concentration input
+                         label = "Hazard Concentration (%)",
+                         value = 5,
+                         min = 0.1,
+                         step = 1,
+                         max = 0.99)),
+            
+            column(width = 4,
+            numericInput(inputId = "nbootInput", #hazard concentration input
+                         label = "Bootstrap Iterations (n)",
+                         value = 10,
+                         min = 10,
+                         step = 10,
+                         max = 10000)),
+            
+        ), #closes out box #4
+        
+        box(title = "Additional Diagnostics (Advanced)", status = "primary", width = 12, collapsible = TRUE, collapsed = TRUE,
+        
+            fluidRow(
+              tabBox(width = 12, height = "650px",
+                     
+                     tabPanel("Cullen and Frey Graph",
+                              
+                       column(width = 12,
+                              plotOutput(outputId = "ssd_CF_plot", height = "600px")),
+                              
+                     ), #close tabpanel
+            
+              tabPanel("Q-Q Plot",
+                              
+                       column(width = 12,
+                              plotOutput(outputId = "ssd_qq_plot", height = "600px")),
+                              
+                     ), #close tabpanel
+              
+              tabPanel("P-P Plot",
+                       
+                       column(width = 12,
+                              plotOutput(outputId = "ssd_pp_plot", height = "600px")),
+                       
+              ), #close tabpanel
+              
+              tabPanel("Histogram & Theoretical Densities",
+                       
+                       column(width = 12,
+                              plotOutput(outputId = "ssd_dens_plot", height = "600px")),
+                       
+              ) #close tabpanel
+              ), #close tab box
+            ), #close fluidrow
+           
+            h4(align = "center", "Credits"),
+            p(align = "center", style = "font-size: 12px;", "This app is built using the R package ", a(href = "https://github.com/bcgov/ssdtools", 'ssdtools', .noWS = "outside"), " version 0.3.2 and share the same functionality."),
+            p(align = "center", style = "font-size: 12px;", "Citation: Thorley, J. and Schwarz C., (2018). ssdtools An R package to fit species Sensitivity Distributions. Journal of Open Source Software, 3(31), 1082. https://doi.org/10.21105/joss.01082."),
+            
+        ), #closes out box #5
+        
+        box(title = "Full Aligned Dataset", status = "primary", width = 12, collapsible = TRUE, collapsed = TRUE,
+            DT::dataTableOutput(outputId = "SSD_fullDatatable")
+            )
+        
+        ), #closes out SSD tab
+
+##### Calculators UI #####
+tabItem(tabName = "Calculators",
+
+        box(title = "Probability Distributions", status = "primary", width = 12, collapsible = TRUE,
+
+            p("Kooi & Koelmans (2019) provide probability distributions for microplastics in various matrices. This tab allows one to simulate data using user-defined parameters and examine summary statistics."),
+            br(),
+
+            fluidRow(
+              tabBox(width = 12,
+
+                     tabPanel("Probability Distributions",
+
+                              shinyjs::useShinyjs(), # requires package for "reset" button, DO NOT DELETE - make sure to add any new widget to the reset_input in the server
+                              id = "Calculators", # adds ID for resetting filters
+
+                              sidebarLayout(
+                                sidebarPanel(
+                                 # Alpha
+                                  numericInput(inputId = "length_alpha_calculator",
+                                                   label = "Power law for size (length)",
+                                                   value = 2.64,
+                                                   min = 0.5,
+                                                   max = 3.0),
+                                #xmin
+                                  numericInput(inputId = "xmin_calculator",
+                                                    label = "Minimum particle length (μm)",
+                                                    value = 1,
+                                                    min = 0.001,
+                                                    max = 4999),
+                                #particle count
+                                  numericInput(inputId = "particle.count_calculator",
+                                                    label = "# of particles to generate",
+                                                    value = 1000,
+                                                    min = 1,
+                                                    max = 100000),
+                                # Input: Slider for selecting binwidth
+                                sliderInput("userBinwidth", 
+                                            "Binwidth:",
+                                            min = 0.0001,
+                                            max = 1,
+                                            value = 0.1),
+                                selectInput(inputId = "theme.type_calculator", "Dark or Light Mode:",
+                                                   list(light = "light", dark = "dark")),
+                                selectInput(inputId = "color.type_calculator", "Color Theme:",
+                                                   list(viridis = "viridis", brewer = "brewer", tron = "tron", locusZoom = "locusZoom", d3 = "d3", Nature = "Nature", JAMA = "JAMA")),
+                                #action buttons 
+                                actionButton("go_simulate", "Simulate data", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655"),
+                                downloadButton("downloadData_simulate", "Download Data (Excel File)", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")#,
+                            #    downloadButton("downloadPlot_simulate", "Download Plot") #can't get working
+                     ), #closes sidebar panel
+                        fluidRow(
+                            box(plotOutput(outputId = "simulated.data.histogram", width = "100%", height = "500px")),
+                     
+                     
+                      
+                     
+                  ) #closes sidebar layour
+              ) #closes tabBox
+          ), #closes tabPanel
+              
+              tabPanel("Alignments",
+                       
+                       shinyjs::useShinyjs(), # requires package for "reset" button, DO NOT DELETE - make sure to add any new widget to the reset_input in the server
+                       id = "Alignments", # adds ID for resetting filters
+                       
+                       fluidRow(
+                       
+                         column(width = 12,
+                         p("This tab allows users to upload laboratory toxicity data (monodisperse or polydisperse) and calculate ERM-aligned polydisperse values corrected to a default size range of the user's choice (e.g. 1 - 5,000 um) using the equations and parameters in", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021).")),
+                         
+                         
+                         br(),
+                         
+                         strong("An illustrated and detailed example of how alignments are performed may be found in this document."),
+                         
+                         br(),
+                         
+                         column(width = 4,
+                                downloadButton("illustrated_example", "Download Illustrated Example", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+                                ),
+                         
+                         br(),
+                         br(),
+                         br(),
+                         
+                         p("First, ensure data is formatted correctly (see example dataset for guidance), then choose site-specific distribution parameters using the widgets below, press 'calculate', and download the new dataset. Note that the uploaded dataset can have any number of columns in addition to the minimum needed for performing alignments (max.size.ingest.um [numeric], dose.particles.mL.master[numeric], polydispersity [binary categorical], particle.surface.area.um2 [numeric], particle.volume.um.3 [numeric], mass.per.particle.mg [numeric]). Note that data labeled as 'polydisperse' must have minimum and maximum parameters, while data labeled 'monodisperse' do not."),
+                         
+                         
+                         br(),
+                         
+                         strong("Use this example dataset as a guide to format data for upload"),
+                       
+                       
+                         br(),
+                         
+                         column(width = 4,
+                                downloadButton("testData_calculator", "Download Example Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")
+                                ),
+                       
+                         br(),
+                         br(),
+                         br(),
+                         
+                         # Input: Select a file ---
+                         column(width = 12,
+                                column(width = 3,
+                                       fileInput("alignment_file", "Upload csv File",
+                                                 multiple = FALSE,
+                                                 accept = c("text/csv",
+                                                            "text/comma-separated-values,text/plain",
+                                                            ".csv"))
+                                       ),
+                                column(width = 9,
+                                       uiOutput("alignment_user_data_check")
+                                       ),
+                                ),
+                         br(),
+                         DTOutput("alignment_user_data_dt"),
+                        
+                         #ERM Checkbox
+                         column(width = 12,
+                                
+                                h3("Bioaccessibility"),
+                                p("Choose the bioaccessibility parameters, and site-specific polydisperse microplastics distributions parameters."),
+                                
+                                # Switch to choose what determines bioaccessibility
+                                column(width = 5,
+                                       radioButtons(inputId = "ingestion.translocation.switch_calculator",
+                                                    label = "Bioaccessibility limited by tissue translocation (fixed) or mouth size opening (species-dependent)?",
+                                                    choices = list(
+                                                      "Restricted by ingestion (species-specific)" = "ingestion",
+                                                      "Restricted by translocation (user-set value or max size ingest- whichever is smaller)" = "translocation"#,
+                                                     # "No restriction for bioaccessibility" = "none"
+                                                    ),
+                                                    selected = "ingestion")
+                                       ),
+                                
+                                # Tissue translocation size limit (if applicable)
+                                column(width = 4,
+                                       numericInput(inputId = "upper.tissue.trans.size.um_calculator",
+                                                    label = "Upper Length (µm) for Translocatable Particles (only works if bioaccessibility determined by translocation; also excludes data from experiments using particles longer than defined value)",
+                                                    value = 88)
+                                       )
+                                ),
+                         
+                         column(width = 12,
+                                strong("Environmental parameters below are reported in ", a(href = "https://www.sciencedirect.com/science/article/pii/S0043135421006278", "Kooi et al., (2021)")),
+                                br(),
+                                p("Easily change params here, or customize below:"),
+                                radioButtons(inputId = "alpha.value.matrix_calculator",
+                                             label = "Alpha Values by Environmental Compartment:",
+                                             choices = c("Marine Surface Water", "Freshwater Surface Water", "Marine Sediment", "Freshwater Sediment"),
+                                             selected = "Marine Surface Water"),
+                                br()
+                                ),
+                         
+                         #Alpha checkbox
+                         column(width = 4,
+                                numericInput(inputId = "alpha_calculator",
+                                             label = "Length Alpha Value",
+                                             value = 2.07,
+                                             step = 0.01)),
+                         
+                         #Alpha surface area input
+                         column(width = 4,
+                                numericInput(inputId = "a.sa_calculator",
+                                             label = "Surface Area Alpha Value",
+                                             value = 1.50,
+                                             step = 0.01)),
+                         
+                         #Alpha volume input
+                         column(width = 4,
+                                numericInput(inputId = "a.v_calculator",
+                                             label = "Volume Alpha Value",
+                                             value = 1.48,
+                                             step = 0.01)),
+                         
+                         #Alpha mass input
+                         column(width = 4,
+                                numericInput(inputId = "a.m_calculator",
+                                             label = "Mass Alpha Value",
+                                             value = 1.32,
+                                             step = 0.01)),
+                         
+                         #Alpha ssa input
+                         column(width = 4,
+                                numericInput(inputId = "a.ssa_calculator",
+                                             label = "Specific Surface Area Alpha Value",
+                                             value = 1.98,
+                                             step = 0.01)),
+                         
+                         #average width to length ratio
+                         column(width = 4,
+                                numericInput(inputId = "R.ave_calculator",
+                                             label = "Average Particle Width to Length Ratio",
+                                             value = 0.77,
+                                             step = 0.01)),
+                         
+                         #average density
+                         column(width = 4,
+                                numericInput(inputId = "p.ave_calculator",
+                                             label = "Average Particle Density (g/cm^3)",
+                                             value = 1.10,
+                                             step = 0.01)),
+                         column(width = 4,
+                                numericInput(inputId = "H_W_ratio_calculator",
+                                             label = "Average Particle Height to Width ratio",
+                                             value = 0.67,
+                                             step = 0.01)),
+                         
+                         # lower length input
+                         column(width = 4,
+                                numericInput(inputId = "lower_length_calculator",
+                                             label = "Lower Length for Default Size Range (µm)",
+                                             value = 1)),
+                         # upper length input
+                         column(width = 4,
+                                numericInput(inputId = "upper_length_calculator",
+                                             label = "Upper Length for Default Size Range (µm)",
+                                             value = 5000)),
+                         br(),
+                         
+                         column(width = 12,
+                                 column(width = 4,
+                                        radioButtons(inputId = "dose_check_calculator", 
+                                                     label = "Dose Metric:",
+                                                     choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL", 
+                                                                 "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
+                                                     selected = "µg/mL")
+                                        ),
+                                 #Action Buttons
+                                 column(width = 4,
+                                        actionButton("go_calculator", "Align data", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
+                                column(width = 4,
+                                       br(),
+                                       downloadButton("downloadData_calculator", "Download Aligned Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+                                ),
+                         column(width = 12,
+                                # Show the table with the predictions
+                                DT::dataTableOutput("alignmentTable")),
+                         )
+                       )#close fluidrow for panel       
+              )# closes tabpanel
+                         
+            ) #closes tabox
+        ) # closes fluidrow
+        ) #closes box
+                     ), #close tabItem
+
+##### Predictions UI #####
+tabItem(tabName = "Predictions",
+        
+        box(title = "Model Predictions of Microplastics Effect Thresholds", status = "primary", width = 12, collapsible = TRUE,
+            
+            p("Coffin et al (in prep) provide a machine learning model to predict concentrations of microplastics expected to result in a given effect for a given species for given particle characteristics."),
+            br(),
+            
+            fluidRow(
+              tabBox(width = 12,
+                     
+                     tabPanel("Start",
+                              
+                              fluidRow(
+                                column(width = 12,
+                                
+                                p("This model predicts the ERM-aligned (1- 5,000 um) concentrations that would be expected to produce an effect in a species of interest for a given effect metric (e.g., NOEC, LOEC). The model was trained on quality-controlled effects data in the ToMEx database and utilizes a random forest structure. The model has been optimized to give the most accurate predictions using the fewest number of parameters. For the food dilution ERM, the model R^2 is 0.87, and for the tissue translocation ERM, the model R^22 is 0.82 based on a subset (25%) of the training data. See Coffin et al (in prep) for additional details, and instructions on the formatting of independent variables for uploading. Additional details regarding this methodology, including a walkthrough of how to use this tab are included in", a(href = "https://youtu.be/ymPMYkcmgDg", "Dr. Scott Coffin's SETAC North America 2021 presentation (YouTube link).", .noOWs = "outside"))),
+                                
+                                br(),
+                                p("Test data may be used as a guide for preparing user data."),
+                                br(),
+                                downloadButton("testData_prediction", "Download Test Data", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"),
+                                column(width = 12,
+                                       br(),
+                                       p("For categorical variables, ensure data are valid values (i.e. levels exist within training dataset). Click below to download a list of valid values for each variable name.")),
+                                br(),
+                                
+                                column(width = 4,
+                                       downloadButton("validValues_prediction", "Download Valid Values", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+                                br(),
+                                br(),
+                                h3("Example data for predictions:"),
+                                column(width = 12,
+                                       DTOutput("test_data_DT")
+                                       )
+                              
+                              )), #end start tabPanel
+                     
+                     tabPanel("Upload Data",
+                                
+                              fluidRow(
+                                column(width = 12,
+                                       
+                                p("It is critical for column names and factor levels to be formatted in exactly the same manner as the training dataset. Once data are formatted correctly, upload below. Note that the dataset may have any number of additional columns, so long as it has all of the columns listed in the example dataset."),
+                                
+                                # Input: Select a file ---
+                                column(width = 6,
+                                fileInput("prediction_file", "Upload csv File:",
+                                          multiple = FALSE,
+                                          accept = c("text/csv",
+                                                     "text/comma-separated-values,text/plain",
+                                                     ".csv")),
+                                #### renderUI for QC check
+                                uiOutput("validation_results")
+                                )# end column
+                              )#end column
+                              ), #end fluidRow
+                              br(),
+                              fluidRow(column(width = 12,
+                                p("Smoothed histograms of the training dataset are overlaid on the user-uploaded data. As test data diverges in relative abundance from training data, model predictions lower in accuracy."),
+                              column(width = 12,
+                                     withSpinner(plotOutput(outputId = "predictionDataSkim"))#,
+                                #     withSpinner(plotOutput("umapPlot"))
+                                     )
+                              ),
+                              column(width = 12,
+                                     column(width = 3,
+                                            downloadButton("download_predictionDataSkim", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4"))
+                                     ),
+                              # render datatable of user's uploaded dataset
+                              DTOutput("user_prediction_DT")
+                              )
+                              
+                     ), # end upload tabPanel
+                     
+                     tabPanel("Predict effect concentrations",
+                              
+                              fluidRow(
+                              #model select
+                              column(width = 12,
+                              p("Two models are currently available for predicting effect concentrations based on the `food dilution` and `tissue translocation` Ecologically Relevant Effect Metrics (ERMs). Choose the ERM for model predictions.")),
+                              column(width = 4,
+                                     radioButtons(inputId = "ERM_radio", 
+                                                  label = "ERM:",
+                                                  choices = c("food dilution", "tissue translocation"),
+                                                  selected = "tissue translocation")),
+                                #action buttons 
+                                column(width = 4,
+                                       br(),
+                                       actionButton("go_predict", "Predict Effect Concentrations", icon("rocket"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655")),
+                              
+                                
+                                column(width = 12,
+                                p("Predicted effect concentrations for the uploaded data can be viewed and downloaded here.")),
+                                
+                                column(width = 12,
+                                       downloadButton("downloadData_prediction", "Download Prediction Data (Excel File)", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")),
+                                
+                                ), # end of fluidrow
+                              
+                              fluidRow(
+                                
+                                column(width = 12,
+                                       # Show the table with the predictions
+                                       DT::dataTableOutput("predictionsTable")))         
+                              ), # closes predictions table tabPanel
+                     
+                     tabPanel("Prediction Accuracy",
+                              
+                              fluidRow(
+                                column(width = 12,
+                                p("If known concentrations were uploaded, predicted effect concentrations can be compared here. The dashed line represents a perfect agreement between predicted and measured effect concentrations.")),
+                                
+                                column(width = 3,
+                                       pickerInput(inputId = "prediction_var",
+                                                   label = "Variable to Highlight:",
+                                                   choices = c("`Organism Group`", "`Life Stage`", "`Species`","`Level of Biological Organization`","`Exposure Route`","Environment","`Acute/Chronic`",
+                                                               "translocatable", "`Effect Score`", "`Effect Metric`","`Broad Endpoint Category`","`Specific Endpoint Category`"),
+                                                   selected = "Organism Group",
+                                                   options = list(`actions-box` = FALSE), # option to de/select all
+                                                   multiple = FALSE)),
+                                column(width = 12,
+                                       plotOutput(outputId = "predictionsScatter")),
+                                column(width = 12,
+                                       column(width = 3,
+                                              downloadButton("downloadScatter_predictions", "Download Plot", icon("download"), style="color: #fff; background-color: #337ab7; border-color: #2e6da4")))
+                              )) #closes accuracy tabPanel
+                     
+                     
+              ) #closes tabox
+            ) # closes fluidrow
+        ) #closes box
+), #close tabItem
+  
+##### Resources UI ####
+
+tabItem(tabName = "Resources", 
+         
+        
+         box(title = "Resources", width = 12, status = "primary",     
+         h4(align = "left", "Data Submission Template:"),
+         
+         h5(align = "left",a(href = "https://sccwrp-my.sharepoint.com/:x:/g/personal/leahth_sccwrp_org/EUOMAPG9I3FBor2pUEpGmKYB1hjGDsDvg6WTOUAwfYXzPg?e=wphbNJ", 'Data Mining Template')),
+         br(),
+         h4(align = "left", "Data Category Descriptions and Data Mining Guides:"),
+         
+         h5(align = "left",a(href = "https://sccwrp-my.sharepoint.com/:b:/g/personal/leahth_sccwrp_org/EdU9Xj4Loc1HtoO-L3aAl-oBfluhMzKwjlaChyWZfGWpnA?e=40VyRT", 'Particle Only Studies')),
+         
+         h5(align = "left",a(href = "https://sccwrp-my.sharepoint.com/:b:/g/personal/leahth_sccwrp_org/EbmjFIgU9kFFvH1LVy2-NjEB8jjkRVBVK-AzHl11LMSFqg?e=brn8Xh", 'Leachate Studies')),
+         
+         h5(align = "left",a(href = "https://sccwrp-my.sharepoint.com/:b:/g/personal/leahth_sccwrp_org/EYk-r5MbFtNDrI2zL6GYvo0B0F9PK7C-lYqeVOvnKU3PKg?e=OkVneU", 'Chemical Transfer Studies')),
+         
+         h5(align = "left",a(href = "https://sccwrp-my.sharepoint.com/:b:/g/personal/leahth_sccwrp_org/ETArwhasnrtOgeqSfuxJDRQBdfYWXK5UDngqGHjNtKAKJw?e=pUzLfS", 'Chemical Co-Exposure Studies'))),
+         
+        ), #close tab
+
+##### Data Submission UI ####
+
+tabItem(tabName = "Submission", 
+        
+        box(title = "Data Submission", width = 6, status = "primary",
+            
+            p("To submit new data to ToMEx, complete a Data Mining Template using the appropriate Guide, which may be found on the Resources tab. Submit completed templates using the button below."),
+              
+            br(),
+            p("For questions regarding data submission or to check to see if data from a specific study has already been uploaded to ToMEx, please email tomex@sccwrp.org"),
+            br(),
+            p(align = "center", actionButton(inputId = "submit", onclick = "window.open('https://sccwrp-my.sharepoint.com/:f:/g/personal/leahth_sccwrp_org/EhnzSiN8GqZFjnGpTbNJgskBGaWp0sVKtnB9nrqszAYoQA')", label = "Upload Data Template", icon("file-upload"), style="color: #fff; background-color:  #117a65; border-color:  #0e6655"))
+            ),
+        
+        ), #close tab
+
+##### Contact UI ####
+
+tabItem(tabName = "Contact", 
+         
+        box(title = "Contact", width = 6, status = "primary",
+         p("For scientific and technical questions, please email tomex@sccwrp.org."),
+         ),
+         
+         )#closes tab
+
+#following three parentheses close out UI. Do not delete. 
+        )))   
+     
+
+#### Server ####
+
+# Define all alpha parameter values by matrix type
+alpha_params <- list(
+  "Marine Surface Water" = c(alpha = 2.07, a.sa = 1.50, a.v = 1.48, a.m = 1.32, a.ssa = 1.98, R.ave = 0.77, H_W_ratio_ssd = 0.77, p.ave = 1.10),
+  "Freshwater Surface Water" = c(alpha = 2.64, a.sa = 2.00, a.v = 1.68, a.m = 1.65, a.ssa = 2.71, R.ave = 0.67, H_W_ratio_ssd = 0.67, p.ave = 1.04),
+  "Marine Sediment" = c(alpha = 2.57, a.sa = 1.75, a.v = 1.50, a.m = 1.50, a.ssa = 2.54, R.ave = 0.75, H_W_ratio_ssd = 0.75, p.ave = 1.16),
+  "Freshwater Sediment" = c(alpha = 3.25, a.sa = 1.89, a.v = 1.53, a.m = 1.56, a.ssa = 2.82, R.ave = 0.70, H_W_ratio_ssd = 0.70, p.ave = 1.15)
+)
+
+observe_alpha_updates <- function(input_var, prefix, input, session) {
+  observeEvent(input[[input_var]], {
+    matrix_type <- input[[input_var]]
+    params <- alpha_params[[matrix_type]]
+    
+    if (!is.null(params)) {
+      purrr::walk2(
+        names(params),
+        params,
+        ~ updateNumericInput(session, paste0(.x, prefix), value = .y)
+      )
+    }
+  }, ignoreNULL = TRUE)
+}
+
+
+server <- function (input, output, session){
+
+##### Welcome S #####
+
+  # Welcome does not have any reactive features.
+  
+##### Overview S #####
+  
+  #Box #1
+  
+   output$polymer_plot <- renderPlot({
+    
+     #setup
+     labeldf<-as.data.frame(xtabs(~poly_f + effect_f, aoc_setup)) %>% 
+       pivot_wider(names_from = effect_f, values_from = Freq) %>% 
+       mutate(label = paste0(Yes,"/",No)) %>% 
+       mutate(pos = No + Yes) %>% 
+       select(poly_f, label, pos)
+     
+     poly <- as.data.frame(xtabs(~poly_f + effect_f, aoc_setup)) %>% 
+       left_join(labeldf, by = "poly_f")
+     
+     #generate plot
+     ggplot(poly,aes(fill= fct_rev(effect_f), x= reorder(poly_f, -Freq), y= Freq)) +
+       geom_bar(position="stack", stat = "identity") +
+       geom_text(aes(y=pos, label=label), vjust=0, size = 5) +
+       scale_fill_manual(values = cal_palette("seagrass"))+
+       theme_classic() +
+       ylab("Number of Endpoints Measured") +
+       labs(fill="Effect", caption = "The first value in each data label indicates number of endpoints where effects were detected (i.e., 'Yes').
+            The second value indciates the number of endpoints where effects were not detected (i.e., 'No').") +
+       guides(x = guide_axis(angle = 25))+
+       theme(text = element_text(size=15),plot.title = element_text(hjust = 0.5, face="bold"))+
+       theme(legend.position = "right",
+             axis.ticks= element_blank(),
+             axis.text.x = element_text(size = 12),
+             axis.title.x = element_blank())
+    })
+  
+   output$vivo_plot <- renderPlot({
+     
+     #setup
+     labeldf<-as.data.frame(xtabs(~vivo_f + effect_f, aoc_setup)) %>% 
+       pivot_wider(names_from = effect_f, values_from = Freq) %>% 
+       mutate(label = paste0(Yes,"/",No)) %>% 
+       mutate(pos = No + Yes) %>% 
+       select(vivo_f, label, pos)
+     
+     vivo <- as.data.frame(xtabs(~vivo_f + effect_f, aoc_setup)) %>% 
+       left_join(labeldf, by = "vivo_f")
+     
+     #generate plot
+     ggplot(vivo,aes(fill= fct_rev(effect_f), x= reorder(vivo_f, -Freq), y= Freq)) +
+       geom_bar(position="stack", stat = "identity") +
+       geom_text(aes(y=pos, label=label), vjust=0, size = 5) +
+       scale_fill_manual(values = cal_palette("lupinus"))+
+       theme_classic() +
+       ylab("Number of Endpoints Measured") +
+       labs(fill="Effect", caption = "The first value in each data label indicates number of endpoints where effects were detected (i.e., 'Yes').
+            The second value indciates the number of endpoints where effects were not detected (i.e., 'No').") +
+       guides(x = guide_axis(angle = 25))+
+       theme(text = element_text(size=15),plot.title = element_text(hjust = 0.5, face="bold"))+
+       theme(legend.position = "right",
+             axis.ticks= element_blank(),
+             axis.text.x = element_text(),
+             axis.title.x = element_blank())
+
+   })
+   
+   output$size_plot <- renderPlot({
+     
+     #setup
+     labeldf<-as.data.frame(xtabs(~size_f + effect_f, aoc_setup)) %>% 
+       pivot_wider(names_from = effect_f, values_from = Freq) %>% 
+       mutate(label = paste0(Yes,"/",No)) %>% 
+       mutate(pos = No + Yes) %>% 
+       select(size_f, label, pos)
+     
+     size <- as.data.frame(xtabs(~size_f + effect_f, aoc_setup)) %>% 
+       left_join(labeldf, by = "size_f")
+     
+     #generate plot
+     ggplot(size,aes(fill= fct_rev(effect_f), x= reorder(size_f, -Freq), y= Freq)) +
+       geom_bar(position="stack", stat = "identity") +
+       geom_text(aes(y=pos, label=label), vjust=0, size = 5) +
+       scale_fill_manual(values = cal_palette("bigsur2"))+
+       theme_classic() +
+       ylab("Number of Endpoints Measured") +
+       labs(fill="Effect", caption = "The first value in each data label indicates number of endpoints where effects were detected (i.e., 'Yes').
+            The second value indciates the number of endpoints where effects were not detected (i.e., 'No').") +
+       guides(x = guide_axis(angle = 25))+
+       theme(text = element_text(size=15),plot.title = element_text(hjust = 0.5, face="bold"))+
+       theme(legend.position = "right",
+             axis.ticks= element_blank(),
+             axis.text.x = element_text(),
+             axis.title.x = element_blank())
+
+   })
+   
+   output$shape_plot <- renderPlot({
+     
+     #setup
+     labeldf<-as.data.frame(xtabs(~shape_f + effect_f, aoc_setup)) %>% 
+       pivot_wider(names_from = effect_f, values_from = Freq) %>% 
+       mutate(label = paste0(Yes,"/",No)) %>% 
+       mutate(pos = No + Yes) %>% 
+       select(shape_f, label, pos)
+     
+     shape <- as.data.frame(xtabs(~shape_f + effect_f, aoc_setup)) %>% 
+       left_join(labeldf, by = "shape_f")
+     
+     #generate plot
+     ggplot(shape,aes(fill= fct_rev(effect_f), x= reorder(shape_f, -Freq), y= Freq)) +
+       geom_bar(position="stack", stat = "identity") +
+       geom_text(aes(y=pos, label=label), vjust=0, size = 5) +
+       scale_fill_manual(values = cal_palette("vermillion"))+
+       theme_classic() +
+       ylab("Number of Endpoints Measured") +
+       labs(fill="Effect", caption = "The first value in each data label indicates number of endpoints where effects were detected (i.e., 'Yes').
+            The second value indciates the number of endpoints where effects were not detected (i.e., 'No').") +
+       guides(x = guide_axis(angle = 25))+
+       theme(text = element_text(size=15),plot.title = element_text(hjust = 0.5, face="bold"))+
+       theme(legend.position = "right",
+             axis.ticks= element_blank(),
+             axis.text.x = element_text(),
+             axis.title.x = element_blank())
+   })
+   
+   output$life_plot <- renderPlot({
+     
+     #setup
+     labeldf<-as.data.frame(xtabs(~life_f + effect_f, aoc_setup)) %>% 
+       pivot_wider(names_from = effect_f, values_from = Freq) %>% 
+       mutate(label = paste0(Yes,"/",No)) %>% 
+       mutate(pos = No + Yes) %>% 
+       select(life_f, label, pos)
+     
+     life <- as.data.frame(xtabs(~life_f + effect_f, aoc_setup)) %>% 
+       left_join(labeldf, by = "life_f")
+     
+     #generate plot
+     ggplot(life,aes(fill= fct_rev(effect_f), x= reorder(life_f, -Freq), y= Freq)) +
+       geom_bar(position="stack", stat = "identity") +
+       geom_text(aes(y=pos, label=label), vjust=0, size = 5) +
+       scale_fill_manual(values = cal_palette("lake"))+
+       theme_classic() +
+       ylab("Number of Endpoints Measured") +
+       labs(fill="Effect", caption = "The first value in each data label indicates number of endpoints where effects were detected (i.e., 'Yes').
+            The second value indciates the number of endpoints where effects were not detected (i.e., 'No').") +
+       guides(x = guide_axis(angle = 25))+
+       theme(text = element_text(size=15),plot.title = element_text(hjust = 0.5, face="bold"))+
+       theme(legend.position = "right",
+             axis.ticks= element_blank(),
+             axis.text.x = element_text(),
+             axis.title.x = element_blank())
+   })
+   
+   output$tax_plot <- renderPlot({
+     
+     #setup
+     labeldf<-as.data.frame(xtabs(~org_f + effect_f, aoc_setup)) %>% 
+       pivot_wider(names_from = effect_f, values_from = Freq) %>% 
+       mutate(label = paste0(Yes,"/",No)) %>% 
+       mutate(pos = No + Yes) %>% 
+       select(org_f, label, pos)
+     
+     tax <- as.data.frame(xtabs(~org_f + effect_f, aoc_setup)) %>% 
+       left_join(labeldf, by = "org_f")
+     
+     #generate plot
+     ggplot(tax,aes(fill= fct_rev(effect_f), x= reorder(org_f, -Freq), y= Freq)) +
+       geom_bar(position="stack", stat = "identity") +
+       geom_text(aes(y=pos, label=label), vjust=0, size = 5) +
+       scale_fill_manual(values = cal_palette("superbloom2"))+
+       theme_classic() +
+       ylab("Number of Endpoints Measured") +
+       labs(fill="Effect", caption = "The first value in each data label indicates number of endpoints where effects were detected (i.e., 'Yes').
+            The second value indciates the number of endpoints where effects were not detected (i.e., 'No').") +
+       guides(x = guide_axis(angle = 25))+
+       theme(text = element_text(size = 15),plot.title = element_text(hjust = 0.5, face="bold"))+
+       theme(legend.position = "right",
+             axis.ticks= element_blank(),
+             axis.text.x = element_text(),
+             axis.title.x = element_blank())
+   })
+   
+   output$exposure_plot <- renderPlot({
+     
+     #setup
+     labeldf<-as.data.frame(xtabs(~exposure.route + effect_f, aoc_setup)) %>% 
+       pivot_wider(names_from = effect_f, values_from = Freq) %>% 
+       mutate(label = paste0(Yes,"/",No)) %>% 
+       mutate(pos = No + Yes) %>% 
+       select(exposure.route, label, pos)
+     
+     exproute <- as.data.frame(xtabs(~exposure.route + effect_f, aoc_setup)) %>% 
+       left_join(labeldf, by = "exposure.route")
+     
+     #generate plot
+     ggplot(exproute,aes(fill= fct_rev(effect_f), x= reorder(exposure.route, -Freq), y= Freq)) +
+       geom_bar(position="stack", stat = "identity") +
+       geom_text(aes(y=pos, label=label), vjust=0, size = 5) +
+       scale_fill_manual(values = cal_palette("wetland"))+
+       theme_classic() +
+       ylab("Number of Endpoints Measured") +
+       labs(fill="Effect", caption = "The first value in each data label indicates number of endpoints where effects were detected (i.e., 'Yes').
+            The second value indciates the number of endpoints where effects were not detected (i.e., 'No').") +
+       guides(x = guide_axis(angle = 25))+
+       theme(text = element_text(size=15),plot.title = element_text(hjust = 0.5, face="bold"))+
+       theme(legend.position = "right",
+             axis.ticks= element_blank(),
+             axis.text.x = element_text(),
+             axis.title.x = element_blank())
+   })
+   
+   #Box #2
+   
+   aoc_filter_endpoint <- eventReactive(list(input$go_endpoint),{
+     
+     # biological organization widget
+     bio_c_endpoint <- input$bio_check_endpoint # assign bio values to "bio_c"
+     
+     aoc_endpoint %>% # take original dataset
+       filter(bio_f %in% bio_c_endpoint) #filter by bio organization
+     
+   })
+   
+   output$plot <- collapsibleTree::renderCollapsibleTree({
+     
+     collapsibleTree(aoc_filter_endpoint(), root = "Aquatic Organisms Database", hierarchy = c("lvl1_f", "lvl2_f", "lvl3_f", "bio_f"),
+                     fontSize = 12, zoomable = FALSE)    
+                     
+   }) 
+   
+
+#### Search S ####
+   
+   output$databaseDataTable <- DT::renderDataTable(
+     aoc_search,
+     filter = "top",
+     rownames = FALSE,
+     style = "bootstrap",
+     options = list(
+       dom = 'ltipr',
+       scrollY = 600,
+       scrollX = TRUE,
+       autoWidth = TRUE,
+       bautoWidth = FALSE
+       ))
+   
+   output$download_search = downloadHandler(filename = paste('ToMEx_Search', Sys.Date(), '.csv', sep=''),
+                                            content = function(file) {
+                                              s = input$databaseDataTable_rows_all
+                                              readr::write_excel_csv(aoc_search[s, , drop = FALSE], file)
+                                            })
+
+#### Screening S ####
+   library(dplyr)
+   library(purrr)
+   library(rlang)
+   library(forcats)
+   library(plotly)
+   library(shinyjs)
+   
+   # 1. Simplified reactive filtered data
+   quality_filtered <- eventReactive(input$go_quality, {
+     filter_list <- list(
+       lvl1_f            = input$lvl1_quality,
+       lvl2_f            = input$lvl2_quality,
+       bio_f             = input$bio_quality,
+       effect_f          = input$effect_quality,
+       life_f            = input$life_quality,
+       poly_f            = input$poly_quality,
+       shape_f           = input$shape_quality,
+       size_f            = input$size_quality,
+       species_f         = input$species_quality,
+       env_f             = input$env_quality,
+       org_f             = input$organism_quality,
+       acute.chronic_f   = input$acute.chronic_quality,
+       tier_zero_tech_f  = input$tech_tier_zero_quality,
+       tier_zero_risk_f  = input$risk_tier_zero_quality,
+       Study_plus        = input$study_plus_quality
+     )
+     
+     reduce(
+       names(filter_list),
+       .init = aoc_quality,
+       .f = function(data, col) {
+         data %>% filter(.data[[col]] %in% filter_list[[col]])
+       }
+     )
+   })
+   
+   # 2. Refactored quality barplot
+   quality_barplotly <- eventReactive(input$go_quality, {
+     df_plot <- quality_filtered() %>%
+       group_by(Category_f, Criteria_f, Score_f, Score) %>%
+       summarise(n_studies = n_distinct(Study_plus), .groups = "drop")
+     
+     order_df <- df_plot %>% 
+       filter(Score_f == "Adequate") %>%
+       select(Category_f, Criteria_f, n_studies) %>%
+       rename(adequate_n_studies = n_studies)
+     
+     df_plot <- df_plot %>%
+       left_join(order_df, by = c("Category_f", "Criteria_f")) %>%
+       mutate(Criteria_f = fct_reorder(Criteria_f, adequate_n_studies, .desc = FALSE))
+     
+     p <- ggplot(df_plot, aes(x = n_studies, y = Criteria_f, fill = Score_f,
+                              text = paste0("<b>Category:</b> ", Category_f, "<br>",
+                                            "<b>Criteria:</b> ", Criteria_f, "<br>",
+                                            "<b>Score Category:</b> ", Score_f, "<br>",
+                                            "<b>Studies:</b> ", n_studies))) +
+       geom_bar(position = "stack", stat = "identity") +
+       facet_wrap(~ Category_f, ncol = 2, scales = "free_y") +
+       scale_fill_manual(
+         values = c(
+           "Inadequate" = "tomato",
+           "Adequate with Restrictions" = "ivory3",
+           "Adequate" = "dodgerblue"
+         )
+       ) +
+       labs(x = "Number of Studies", y = "", fill = "Score") +
+       theme_minimal(base_size = 15) +
+       theme(legend.position = "top")
+     
+     ggplotly(p, tooltip = "text") %>%
+       layout(
+         legend = list(
+           orientation = "h",
+           x = 0.5,
+           xanchor = "center",
+           y = 1.1
+         ),
+         margin = list(t = 100)
+       )
+   })
+   
+   output$quality_barplotly <- renderPlotly({ quality_barplotly() })
+   
+   # 3. Generalized heatmap plot function
+   make_heatmap_plot <- function(df, category, title) {
+     df_cat <- df %>%
+       filter(Category_f == category) %>%
+       group_by(Study_plus, Criteria_f, Score) %>%
+       summarise(.groups = "drop") %>%
+       group_by(Study_plus, Criteria_f) %>%
+       slice_max(Score) %>%
+       ungroup() %>%
+       pivot_wider(names_from = Study_plus, values_from = Score) %>%
+       column_to_rownames(var = "Criteria_f") %>%
+       as.data.frame()
+     
+     ordered_studies <- names(sort(colSums(df_cat, na.rm = TRUE), decreasing = TRUE))
+     mat <- as.matrix(df_cat)[, ordered_studies]
+     mat_t <- t(mat)
+     
+     plot_ly(
+       x = colnames(mat_t),
+       y = rownames(mat_t),
+       z = mat_t,
+       type = "heatmap",
+       ygap = 0.4, xgap = 0.4,
+       colors = c("tomato", "ivory3", "dodgerblue"),
+       hoverinfo = "text",
+       showscale = FALSE,
+       hovertemplate = paste(
+         "Study: %{y}<br>",
+         "Criteria: %{x}<br>",
+         "Score: %{z}<extra></extra>"
+       )
+     ) %>%
+       layout(
+         title = title,
+         xaxis = list(type = "category", tickfont = list(size = 14)),
+         yaxis = list(tickfont = list(size = 10))
+       )
+   }
+   
+   tech_plotly <- eventReactive(input$go_quality, {
+     make_heatmap_plot(quality_filtered(), "Technical", "Technical Criteria")
+   })
+   
+   risk_plotly <- eventReactive(input$go_quality, {
+     make_heatmap_plot(quality_filtered(), "Risk Assessment", "Risk Assessment Criteria")
+   })
+   
+   output$tech_plotly <- renderPlotly({ tech_plotly() })
+   output$risk_plotly <- renderPlotly({ risk_plotly() })
+   
+   # 4. Simplified reset observer
+   observeEvent(input$reset_quality, {
+     ids <- c(
+       "lvl1_quality", "lvl2_quality", "bio_quality", "effect_quality",
+       "life_quality", "poly_quality", "shape_quality", "size_quality",
+       "species_quality", "env_quality", "organism_quality", "acute.chronic_quality",
+       "tech_tier_zero_quality", "risk_tier_zero_quality", "study_plus_quality"
+     )
+     purrr::walk(ids, shinyjs::reset)
+   })
+   
+   
+#### Exploration S ####
+   
+   ###### Alpha Value Radio Buttons ######
+   observe_alpha_updates("alpha.value.matrix", "", input, session)
+   
+  # Create new dataset based on widget filtering and adjusted to reflect the presence of the "update" button.
+  aoc_filter <- eventReactive(list(input$go),{
+    # eventReactive explicitly delays activity until you press the button
+    # use the inputs to create a new dataset that will be fed into the renderPlot calls below
+
+    # every selection widget should be represented as a new variable below
+    org_c <- input$organism_check # assign organism input values to "org_c"
+    lvl1_c <- input$lvl1_check # assign level values to "lvl1_c"
+    lvl2_c <- input$lvl2_check # assign lvl2 values to "lvl2_c"
+    bio_c <- input$bio_check # assign bio values to "bio_c"
+    effect_c <- input$effect_check # assign effect values to "effect_c"
+    life_c <- input$life_check #assign values to "life_check"
+    env_c <- input$env_check #assign values to "env_c"
+    poly_c <- input$poly_check # assign values to "poly_c"
+    shape_c <- input$shape_check # assign values to "shape_c" 
+    size_c <- input$size_check # assign values to "size_c"
+    species_c <- input$species_check #assign values to "species_c"
+    tech_tier_zero_c<-input$tech_tier_zero_check #assign values to "design_tier_zero_c"
+    risk_tier_zero_c<-input$risk_tier_zero_check #assign values to "risk_tier_zero_c"
+    range_n <- input$range # assign values to "range_n"
+    dose_check <- input$dose_check #renames selection from radio button
+    ERM_check <- input$ERM_check #chooses aligned dose metric by ecologically relevant metric
+    Rep_Con_rad <- input$Rep_Con_rad #use nominal or calculated exposure concentrations. Options are TRUE (calculated) or FALSE (reported)
+    acute.chronic.c <- input$acute.chronic_check #acute chronic checkbox
+    exp_type_c <- input$exp_type_check #experiment type
+  
+    ## ERM parameterization from user input ##
+    # Define params for correction #
+    alpha.input <- input$alpha #length power law exponent
+    x2D_set <- as.numeric(input$upper_length) #upper size range (default - user defined)
+    x1D_set <- input$lower_length #lower size range (default - user defined)
+    x1M_set <- input$lower_length #lower size range for ingestible plastic (user defined)
+    upper.tissue.trans.size.um <- as.numeric(input$upper.tissue.trans.size.um) #user-defined upper value for tissue trans (numeric)
+    ingestion.translocation.switch <- input$ingestion.translocation.switch #user-defined: inputs are "ingestion","translocation", or "none
+    
+    
+    # define parameters for power law coefficients
+    a.sa.input <- input$a.sa #1.5 #marine surface area power law
+    a.v.input <- input$a.v #1.48 #a_V for marine surface water volume
+    a.m.input <- input$a.m #1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa.input <- input$a.ssa #1.98 # A_SSA for marine surface water
+    
+    #define additional parameters for calculations based on averages in the environment
+    R.ave.input <- input$R.ave #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave.input <- input$p.ave #1.10 #average density in marine surface water
+    H_W_ratio.input <- input$H_W_ratio #0.67 #average density in marine surface water
+    
+    print("Performing alignments on exploration dataset..")
+    
+    # calculate ERM for each species
+    aoc_setup <- aoc_setup %>% 
+      # explicitly add vars to dataframe instead of leaving as global vars - otherwise mux.poly.generalizable fnx will fail
+      mutate(alpha = alpha.input,
+             x2D_set = x2D_set,
+             x1D_set = x1D_set,
+             x1M_set = x1M_set,
+             upper.tissue.trans.size.um = upper.tissue.trans.size.um,
+             ingestion.translocation.switch = ingestion.translocation.switch,
+             a.sa = a.sa.input,
+             a.v = a.v.input,
+             a.m = a.m.input,
+             a.ssa = a.ssa.input,
+             R.ave = R.ave.input,
+             p.ave = p.ave.input,
+             H_W_ratio = H_W_ratio.input
+      ) %>% 
+      ### BIOACCESSIBILITY ###
+      # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
+      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
+                                    max.size.ingest.um < x2D_set ~ max.size.ingest.um,
+                                    max.size.ingest.um > x2D_set ~ x2D_set)) %>%  #set to default as upper limit or max size ingest, whichever is smaller
+      # define upper size length for Translocation 
+      mutate(x2M_trans = case_when(is.na(max.size.ingest.um) ~ upper.tissue.trans.size.um, 
+                                   max.size.ingest.um  < upper.tissue.trans.size.um ~  max.size.ingest.um,
+                                   max.size.ingest.um  > upper.tissue.trans.size.um ~ upper.tissue.trans.size.um)) %>% 
+      #define which bioaccessibility limit to use for calculations based on user input
+      mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
+      mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
+                             ingestion.translocation == "translocation" ~ x2M_trans,
+                             ingestion.translocation == "none" ~ x2D_set,
+                             )) %>% 
+      ###############################################################################
+    ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
+    ######################################################################################
+    ## assign whether polydisperse data are partially, fully, or not bioavailable
+    mutate(ingestible_poly = case_when(
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (all)",
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (some)",
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions > x2M_ingest ~ "not ingestible"),
+      translocatable_poly = case_when(
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (all)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
+    ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
+      # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
+      ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
+    mutate(size.length.max.um.used.for.conversions = case_when(
+      is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
+      !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000)) %>% 
+      # correct for partially translocatable particles
+      mutate(CF_bioavailable_trans = case_when(translocatable_poly == "translocatable (some)" ~ CFfnx(a = alpha,
+                                                                                                      x1D = size.length.min.um.used.for.conversions,
+                                                                                                      x2D = x2M_trans,
+                                                                                                      x1M = size.length.min.um.used.for.conversions,
+                                                                                                      x2M = size.length.max.um.used.for.conversions),
+                                               T ~ 1)) %>% # all other cases retain original dose
+      # now correct the dosage (will be fraction )
+      mutate(dose.particles.mL.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.mL.master,
+                                                 T ~ dose.particles.mL.master),
+             dose.particles.kg.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.kg.sediment.master,
+                                                 T ~ dose.particles.kg.sediment.master)) %>% 
+      # correct for partially ingestible particles
+      mutate(CF_bioavailable_ingest = case_when(ingestible_poly == "ingestible (some)" ~ CFfnx(a = alpha,
+                                                                                               x1D = size.length.min.um.used.for.conversions,
+                                                                                               x2D = x2M_ingest,
+                                                                                               x1M = size.length.min.um.used.for.conversions,
+                                                                                               x2M = size.length.max.um.used.for.conversions),
+                                                T ~ 1)) %>% 
+      mutate(dose.particles.mL.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.mL.master,
+                                                  T ~ dose.particles.mL.master),
+             dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
+                                                  T ~ dose.particles.kg.sediment.master)
+      ) %>% 
+      # correct for particles when no bioavailability filter selected by user
+      mutate(CF = CFfnx(a = alpha,
+                        x1D = size.length.min.um.used.for.conversions,
+                        x2D = x2M,
+                        x1M = size.length.min.um.used.for.conversions,
+                        x2M = size.length.max.um.used.for.conversions)) %>%
+      mutate(dose.particles.mL.no_filter = CF * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF * dose.particles.kg.sediment.master) %>% 
+      ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    ## calculate size parameters using compartment characteristics
+    ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
+    ##### ----- LENGTH ------ ###
+    # no need to correct monodisperse. Min for polydispserse remains same #
+    ## polydisperse ##
+    mutate(size.length.max.um.trans = case_when(translocatable_poly == "translocatable (some)" ~ x2M_trans,
+                                                T ~ size.length.max.um.used.for.conversions),
+           size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
+                                                 T ~ size.length.max.um.used.for.conversions)) %>% 
+      
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
+      ##### ----- WIDTH ------ ###
+      ## Monodisperse ##
+      mutate(size.width.um.used.for.conversions = case_when(
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        is.na(size.width.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # W = L for spheres
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
+        T ~ size.width.um.used.for.conversions # if available, use as-is
+      )) %>% 
+      ### Polydisperse ###
+      # Min is always same #
+      # calculate size parameters using compartment characteristics
+      mutate(size.width.min.um.used.for.conversions = case_when(
+        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
+        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
+        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+      ### Max depends on ingest/trans limits ###
+      # TRANS #
+      mutate(size.width.max.um.trans = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # INGEST #
+      mutate(size.width.max.um.ingest = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # No bioavailability #
+      mutate(size.width.max.um.used.for.conversions = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      
+      ###### ------ HEIGHT ----- ##### 
+    ## Monodisperse ##
+    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+    mutate(size.height.um.used.for.conversions = case_when(
+      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+    )) %>% 
+      ### Polydisperse ##
+      ## Min is always same ##
+      mutate(size.height.min.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%  # environment AND average height to width ratio (kooi et al 2021)
+      # trans #
+      mutate(size.height.max.um.trans = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # Ingest # 
+      mutate(size.height.max.um.ingest = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # No bioavailability #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+      
+      ############ ------ Volume ------ ##########
+    ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    #### Monodisperse ##
+    # calculate volume for monodisperse particles #
+    mutate(particle.volume.um3 = volumefnx(R = R.ave,
+                                           length = size.length.um.used.for.conversions, 
+                                           width = size.width.um.used.for.conversions,
+                                           height = size.height.um.used.for.conversions
+    )) %>% 
+      #### Polydisperse ##
+      mutate(particle.volume.um3.min = volumefnx(R = R.ave, 
+                                                 length = size.length.min.um.used.for.conversions,
+                                                 width = size.width.min.um.used.for.conversions, 
+                                                 height = size.height.min.um.used.for.conversions)) %>% 
+      ### Trans ##
+      # calculate min and max volume when polydisperse particles are used (being sure to use ingestion-restricted sizes)
+      # calculate max volume when polydisperse particles are used (translocation-limited)
+      mutate(particle.volume.um3.max.trans = volumefnx(R = R.ave,
+                                                       length = size.length.max.um.trans,
+                                                       width = size.width.max.um.trans, 
+                                                       height = size.height.max.um.trans)) %>%
+      ### Ingest  ##
+      # calculate max volume when polydisperse particles are used (ingestlocation-limited)
+      mutate(particle.volume.um3.max.ingest = volumefnx(R = R.ave,
+                                                        length = size.length.max.um.ingest,
+                                                        width = size.width.max.um.ingest, 
+                                                        height = size.height.max.um.ingest)) %>% 
+      ### No Filter ###
+      # calculate max volume when polydisperse particles are used (no bioavility fildter)
+      mutate(particle.volume.um3.max.none = volumefnx(R = R.ave,
+                                                      length = size.length.max.um.used.for.conversions,
+                                                      width = size.width.max.um.used.for.conversions, 
+                                                      height = size.height.max.um.used.for.conversions)) %>% 
+      ############ ------ Surface Area ------ ##########
+    # calculate surface are for monodisperse particles
+    mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
+                                             width = size.width.um.used.for.conversions,
+                                             height = size.height.um.used.for.conversions,
+                                             R = R.ave,
+                                             H_W_ratio = H_W_ratio)) %>% 
+      ##### Polydisperse ###
+      # calculate min/max SA for polydisperse mixtures (being sure to use translocation/ingestion-restricted polydisperse upper sizes)
+      mutate(particle.surface.area.um2.min = SAfnx(length = size.length.min.um.used.for.conversions,
+                                                   width = size.width.min.um.used.for.conversions,
+                                                   height = size.height.min.um.used.for.conversions,
+                                                   R = R.ave,
+                                                   H_W_ratio = H_W_ratio)) %>% 
+      ### Trans ## 
+      mutate(particle.surface.area.um2.max.trans = SAfnx(R = R.ave,
+                                                         H_W_ratio = H_W_ratio,
+                                                         length = size.length.max.um.trans,
+                                                         width = size.width.max.um.trans, 
+                                                         height = size.height.max.um.trans)) %>% 
+      ### Ingest ### 
+      mutate(particle.surface.area.um2.max.ingest = SAfnx(R = R.ave,
+                                                          H_W_ratio = H_W_ratio,
+                                                              length = size.length.max.um.ingest,
+                                                              width = size.width.max.um.ingest, 
+                                                              height = size.height.max.um.ingest)) %>% 
+      ### No bioavailbility filter ### 
+      mutate(particle.surface.area.um2.max.none = SAfnx(R = R.ave,
+                                                        H_W_ratio = H_W_ratio,
+                                                            length = size.length.max.um.used.for.conversions,
+                                                            width = size.width.max.um.used.for.conversions, 
+                                                            height = size.height.max.um.used.for.conversions)) %>% 
+      #calculate mass for monodisperse particles  
+      mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3    
+      #calculate minimum and maximum mass or polydisperse particles
+      mutate(mass.per.particle.mg.min = massfnx(v = particle.volume.um3.min, p = density.g.cm3) * 1e-3) %>% #equation uses g/cm3
+      # Trans
+      mutate(mass.per.particle.mg.max.trans = massfnx(v = particle.volume.um3.max.trans, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # Ingest
+      mutate(mass.per.particle.mg.max.ingest = massfnx(v = particle.volume.um3.max.ingest, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # none
+      mutate(mass.per.particle.mg.max.none = massfnx(v = particle.volume.um3.max.none, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      
+      ###### Alignments #2 #####
+    # Particle ERM #
+    # calculate effect threshold for particles (depending on selection of ingestion/translocation switch)
+    mutate(
+      EC_mono_p.particles.mL = case_when(
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "ingestion" ~ dose.particles.mL.ingest,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "ingestion" ~ dose.particles.kg.ingest,
+        
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "translocation" ~ dose.particles.mL.trans,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "translocation" ~ dose.particles.kg.trans,
+        
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "none" ~ dose.particles.mL.no_filter,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "none" ~ dose.particles.kg.no_filter
+      )
+    ) %>% 
+      #  ensure algae never considered for food dilution
+      mutate(EC_mono_p.particles.mL = case_when(
+        ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        T ~ EC_mono_p.particles.mL)) %>%
+      mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
+      mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
+      # polydisperse effect threshold for particles
+      mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
+      #calculate CF_bio for all conversions
+      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
+      ## Calculate environmentally relevant effect threshold for particles
+      mutate(EC_env_p.particles.mL = EC_poly_p.particles.mL * CF_bio) %>%  #aligned particle effect concentraiton (1-5000 um)
+      
+      # Surface Area ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible surface area
+      mutate(x_LL_sa = SAfnx(length = x1D_set, 
+                             width = x1D_set, 
+                             height = x1D_set)) %>% #length-limited
+      #calculate upper ingestible surface area
+      mutate(x_UL_sa = SAfnx(length = x2M, #LENGTH-limited (less conservative assumption)
+                             width = x2M, #length-limited
+                             height = x2M)) %>%   #length-limited
+      #calculate mu_x_poly (env) for surface area
+      mutate(mu.sa.poly = mux_polyfnx(a.sa, x_UL_sa, x_LL_sa)) %>% 
+      
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.sa.mono = case_when(
+        polydispersity == "monodisperse" ~ particle.surface.area.um2, # use reported surface area in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                            x_LL = particle.surface.area.um2.min,
+                                                                                                            x_UL = particle.surface.area.um2.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                        x_LL = particle.surface.area.um2.min,
+                                                                                                        x_UL = particle.surface.area.um2.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                   x_LL = particle.surface.area.um2.min,
+                                                                                                   x_UL = particle.surface.area.um2.max.none)
+      )) %>% 
+      #calculate polydisperse effect concentration for surface area (particles/mL)
+      mutate(EC_poly_sa.particles.mL = (EC_mono_p.particles.mL * mu.sa.mono)/mu.sa.poly) %>%  
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_sa.particles.mL = EC_poly_sa.particles.mL * CF_bio) %>% 
+      
+      # Volume ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible volume 
+      mutate(x_LL_v = volumefnx(length = x1D_set,
+                                width = x1D_set,
+                                height = x1D_set
+      )) %>% 
+      #calculate maximum ingestible volume 
+      mutate(x_UL_v = volumefnx(length = x2M, #length-limited
+                                width = x2M,
+                                height = x2M
+      )) %>% #length-limited
+      # calculate mu.v.poly
+      mutate(mu.v.poly = mux_polyfnx(a.v, x_UL_v, x_LL_v)) %>% 
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.v.mono = case_when(
+        polydispersity == "monodisperse" ~ particle.volume.um3, # use reported volume in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                            x_LL = particle.volume.um3.min,
+                                                                                                            x_UL = particle.volume.um3.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                        x_LL = particle.volume.um3.min,
+                                                                                                        x_UL = particle.volume.um3.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                   x_LL = particle.volume.um3.min,
+                                                                                                   x_UL = particle.volume.um3.max.none)
+      )) %>% 
+      
+      #calculate polydisperse effect concentration for volume (particles/mL)
+      mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+      # Mass ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible mass
+      mutate(x_LL_m = massfnx(v = x_LL_v, p = p.ave)) %>% 
+      #calculate upper ingestible mass
+      mutate(x_UL_m = massfnx(v = x_UL_v, p = p.ave)) %>% #average density
+      # calculate mu.m.poly
+      mutate(mu.m.poly = mux_polyfnx(a.m, x_UL_m, x_LL_m)) %>% 
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.m.mono = case_when(
+        polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.m, 
+                                                                                                            x_LL = mass.per.particle.mg.min,
+                                                                                                            x_UL = mass.per.particle.mg.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.m, 
+                                                                                                        x_LL = mass.per.particle.mg.min,
+                                                                                                        x_UL = mass.per.particle.mg.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.none)
+      )) %>% 
+      #calculate polydisperse effect concentration for volume (particles/mL)
+      mutate(EC_poly_m.particles.mL = (EC_env_p.particles.mL * mu.m.mono)/mu.m.poly) %>%
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_m.particles.mL = EC_poly_m.particles.mL * CF_bio) %>% 
+      
+      # Specific Surface Area ERM #
+      mutate(mu.ssa.mono = mu.sa.mono/mu.m.mono) %>% #define mu_x_mono for alignment to ERM (um^2/ug)
+      #calculate lower ingestible 1/SSA
+      mutate(x_LL_ssa = SSA.inversefnx(sa = x_LL_sa, #surface area
+                                       m = x_LL_m) #mass
+      ) %>% 
+      #calculate upper ingestible SSA  (um^2/ug)
+      mutate(x_UL_ssa = SSA.inversefnx(sa = x_UL_sa, #surface area
+                                       m = x_UL_m) #mass
+      ) %>% 
+      #calculate mu_x_poly for specific surface area
+      #note that mu were calcaulted for polydisperse particles before, so not special case needed here
+      mutate(mu.ssa.inverse.poly = mux_polyfnx(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
+      #calculate polydisperse effect concentration for specific surface area (particles/mL)
+      mutate(mu.ssa.poly = 1 / mu.ssa.inverse.poly) %>%  #calculate mu_SSA from inverse
+      mutate(EC_poly_ssa.particles.mL = (EC_env_p.particles.mL * mu.ssa.mono)/mu.ssa.poly) %>% 
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_ssa.particles.mL = EC_poly_ssa.particles.mL * CF_bio) %>% 
+      
+      ### Convert to Metrics other than particles/mL ###
+      ## convert all environmentally realistic thresholds to surface area ##
+      # particle count to surface area #
+      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to surface area #
+      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to surface area #
+      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to surface area #
+      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to surface area #
+      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to volume ##
+      # particle count to volume #
+      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to volume #
+      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to volume #
+      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to volume #
+      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to volume #
+      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to mass ##
+      # particle count to mass #
+      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to mass #
+      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to mass #
+      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to mass #
+      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to mass #
+      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to specific surface area ##
+      # particle count to specific surface area #
+      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to specific surface area #
+      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to specific surface area #
+      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to specific surface area #
+      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to specific surface area #
+      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
+    
+    print("Alignments on exploration dataset complete!")
+    
+    #Alignment Options Table
+    dose_lookup <- tribble(
+      ~dose_check,         ~ERM_check,            ~dose_col,
+      #Water-based concentrations
+      "µg/mL",             "Unaligned",           "dose.mg.L.master",
+      "Particles/mL",      "Unaligned",           "dose.particles.mL.master",
+      "µm3/mL",            "Unaligned",           "dose.um3.mL.master",
+      "µm2/mL",            "Unaligned",           "dose.um2.mL.master",
+      "µm2/µg/mL",         "Unaligned",           "dose.um2.ug.mL.master",
+      "Particles/mL",      "Particles",           "EC_env_p.particles.mL",
+      "Particles/mL",      "Surface Area",        "EC_env_sa.particles.mL",
+      "Particles/mL",      "Volume",              "EC_env_v.particles.mL",
+      "Particles/mL",      "Mass",                "EC_env_m.particles.mL",
+      "Particles/mL",      "Specific Surface Area", "EC_env_ssa.particles.mL",
+      "µm2/mL",            "Particles",           "EC_env_p.um2.mL",
+      "µm2/mL",            "Surface Area",        "EC_env_sa.um2.mL",
+      "µm2/mL",            "Volume",              "EC_env_v.um2.mL",
+      "µm2/mL",            "Mass",                "EC_env_m.um2.mL",
+      "µm2/mL",            "Specific Surface Area", "EC_env_ssa.um2.mL",
+      "µg/mL",             "Particles",           "EC_env_p.ug.mL",
+      "µg/mL",             "Surface Area",        "EC_env_sa.ug.mL",
+      "µg/mL",             "Volume",              "EC_env_v.ug.mL",
+      "µg/mL",             "Mass",                "EC_env_m.ug.mL",
+      "µg/mL",             "Specific Surface Area", "EC_env_ssa.ug.mL",
+      "µm3/mL",            "Particles",           "EC_env_p.um3.mL",
+      "µm3/mL",            "Surface Area",        "EC_env_sa.um3.mL",
+      "µm3/mL",            "Volume",              "EC_env_v.um3.mL",
+      "µm3/mL",            "Mass",                "EC_env_m.um3.mL",
+      "µm3/mL",            "Specific Surface Area", "EC_env_ssa.um3.mL",
+      "µm2/µg/mL",         "Particles",           "EC_env_p.um2.ug.mL",
+      "µm2/µg/mL",         "Surface Area",        "EC_env_sa.um2.ug.mL",
+      "µm2/µg/mL",         "Volume",              "EC_env_v.um2.ug.mL",
+      "µm2/µg/mL",         "Mass",                "EC_env_m.um2.ug.mL",
+      "µm2/µg/mL",         "Specific Surface Area", "EC_env_ssa.um2.ug.mL",
+      #Sediment-based concentrations
+      "mg/kg sediment",            "Unaligned",             "dose.mg.kg.sediment.master",
+      "Particles/kg sediment",     "Unaligned",             "dose.particles.kg.sediment.master",
+      "µm3/kg sediment",           "Unaligned",             "dose.um3.kg.sediment.master",
+      "µm2/kg sediment",           "Unaligned",             "dose.um2.kg.sediment.master",
+      "µm2/µg/kg sediment",        "Unaligned",             "dose.um2.ug.kg.sediment.master",
+      
+      "Particles/kg sediment",     "Particles",             "EC_env_p.particles.mL",
+      "Particles/kg sediment",     "Surface Area",          "EC_env_sa.particles.mL",
+      "Particles/kg sediment",     "Volume",                "EC_env_v.particles.mL",
+      "Particles/kg sediment",     "Mass",                  "EC_env_m.particles.mL",
+      "Particles/kg sediment",     "Specific Surface Area", "EC_env_ssa.particles.mL",
+      
+      "µm2/kg sediment",           "Particles",             "EC_env_p.um2.mL",
+      "µm2/kg sediment",           "Surface Area",          "EC_env_sa.um2.mL",
+      "µm2/kg sediment",           "Volume",                "EC_env_v.um2.mL",
+      "µm2/kg sediment",           "Mass",                  "EC_env_m.um2.mL",
+      "µm2/kg sediment",           "Specific Surface Area", "EC_env_ssa.um2.mL",
+      
+      "mg/kg sediment",            "Particles",             "EC_env_p.ug.mL",
+      "mg/kg sediment",            "Surface Area",          "EC_env_sa.ug.mL",
+      "mg/kg sediment",            "Volume",                "EC_env_v.ug.mL",
+      "mg/kg sediment",            "Mass",                  "EC_env_m.ug.mL",
+      "mg/kg sediment",            "Specific Surface Area", "EC_env_ssa.ug.mL",
+      
+      "µm3/kg sediment",           "Particles",             "EC_env_p.um3.mL",
+      "µm3/kg sediment",           "Surface Area",          "EC_env_sa.um3.mL",
+      "µm3/kg sediment",           "Volume",                "EC_env_v.um3.mL",
+      "µm3/kg sediment",           "Mass",                  "EC_env_m.um3.mL",
+      "µm3/kg sediment",           "Specific Surface Area", "EC_env_ssa.um3.mL",
+      
+      "µm2/µg/kg sediment",        "Particles",             "EC_env_p.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Surface Area",          "EC_env_sa.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Volume",                "EC_env_v.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Mass",                  "EC_env_m.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Specific Surface Area", "EC_env_ssa.um2.ug.mL"
+    )
+    
+    # Join to get correct column name
+    selected_col <- dose_lookup %>%
+      filter(dose_check == !!dose_check, ERM_check == !!ERM_check) %>%
+      pull(dose_col)
+    
+    # Apply filtering if needed
+    if (ERM_check == "Unaligned") {
+      if (Rep_Con_rad %in% c("reported", "converted")) {
+        aoc_setup <- aoc_setup %>%
+          filter(dose.particles.mL.master.converted.reported|dose.particles.kg.sediment.master.converted.reported == Rep_Con_rad)
+      }
+      aoc_setup <- aoc_setup %>%
+        mutate(dose_new = .data[[selected_col]])
+    } else {
+      if (Rep_Con_rad %in% c("reported", "converted")) {
+        aoc_setup <- aoc_setup %>%
+          filter(dose.particles.mL.master.converted.reported|dose.particles.kg.sediment.master.converted.reported == Rep_Con_rad)
+      }
+      aoc_setup <- aoc_setup %>%
+        mutate(dose_new = .data[[selected_col]])
+    }
+    
+    # new dataset based on filtering
+    aoc_exploration <- aoc_setup %>% # take original dataset
+    filter(exp_type_f %in% exp_type_c) %>%   #filter by experiment type
+    filter(org_f %in% org_c) %>%  # filter by organism inputs
+    filter(lvl1_f %in% lvl1_c) %>%  # filter by level inputs
+    filter(lvl2_f %in% lvl2_c) %>%   #filter by level 2 inputs
+    filter(bio_f %in% bio_c) %>%  #filter by bio organization
+    filter(effect_f %in% effect_c) %>%  #filter by effect
+    filter(life_f %in% life_c) %>%  #filter by life stage
+    filter(poly_f %in% poly_c) %>%  #filter by polymer
+    filter(size_f %in% size_c) %>%  #filter by size class
+    filter(shape_f %in% shape_c) %>%  #filter by shape
+    filter(species_f %in% species_c) %>%  #filter by species
+    filter(env_f %in% env_c) %>%  #filter by environment
+    filter(acute.chronic_f %in% acute.chronic.c) %>% #acute/chronic
+    filter(tier_zero_tech_f %in% tech_tier_zero_c) %>%  #technical quality
+    filter(tier_zero_risk_f %in% risk_tier_zero_c)  %>%  #risk assessment quality
+    filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
+                     ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M),#if ingestion-limited, don't use data outside upper default size range
+                     ingestion.translocation.switch == "none" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set) #if none selected, don't filter
+                     )) %>%
+   # remove invalid data
+        filter(dose_new > 0) %>% 
+    drop_na(dose_new)
+      #filter(size.length.um.used.for.conversions <= range_n) #For size slider widget - currently commented out
+  
+    print("Exploration dataset filtered and aligned!")
+    print(head(aoc_exploration %>% sample_n(6) %>% select(rowid, org_f, effect_f, dose_new)))
+    
+    aoc_exploration
+  })
+
+#caption ouput       
+  output$caption<-renderText({ #rename plot types in UI
+    switch(input$plot.type,
+           "boxplot" 	= 	"Boxplot",
+           "violin" = "Violin Plot",
+           "beeswarm" = "Beeswarm",
+           "bar" 		=	"Bar graph")
+  })
+  
+  # Use newly created dataset from above to generate plots for size, shape, polymer, and endpoint plots on four different rows.
+  
+  #Organism plot
+  
+  organism_plot_react <- eventReactive(list(input$go),{
+    
+    #plot types
+    plot.type<-switch(input$plot.type,
+                      "boxplot" 	= geom_boxplot(alpha = 0.8, aes(color = effect_f)),
+                      "violin" = geom_violin(alpha = 0.8, aes(color = effect_f)),
+                      "beeswarm" = geom_quasirandom(alpha = 0.8, aes(color = effect_f), 
+                                                    method = "smiley", groupOnX = FALSE, cex = 2)) #groupOnX specifies groups on y axis
+    
+    #Theme type
+    theme.type<-switch(input$theme.type_exp,
+                       "light" 	= theme_classic(),
+                       "dark" = dark_theme_bw()) 
+    #color selection
+    fill.type <- switch(input$color.type_exp,
+                        "default" =  scale_fill_manual(values = c("#FD8D3C", "#7F2704")),
+                        "viridis" = scale_fill_viridis(discrete = TRUE),
+                        "brewer" =  scale_fill_brewer(palette = "Paired"),
+                        "tron" = scale_fill_tron(),
+                        "locusZoom" = scale_fill_locuszoom(),
+                        "d3" = scale_fill_d3(),
+                        "Nature" = scale_fill_npg(),
+                        "JAMA" = scale_fill_jama())
+    #color selection
+    color.type <- switch(input$color.type_exp,
+                         "default" =  scale_color_manual(values = c("#FD8D3C", "#7F2704")),
+                         "viridis" = scale_color_viridis(discrete = TRUE),
+                         "brewer" =  scale_color_brewer(palette = "Paired"),
+                         "tron" = scale_color_tron(),
+                         "locusZoom" = scale_color_locuszoom(),
+                         "d3" = scale_color_d3(),
+                         "Nature" = scale_color_npg(),
+                         "JAMA" = scale_color_jama())
+    
+    # translate reactive
+    aoc_filter <- aoc_filter() 
+    
+    #Mini data set for measurement and study labels
+    aoc_org1 <- aoc_filter %>%
+      group_by(org_f, effect_f) %>% # need to include so there's a recognized "y"
+      summarize(dose_new = quantile(dose_new, .1), # need for recognized "x"
+                measurements = n(),
+                studies = n_distinct(article))
+    
+    print(head(aoc_org1))
+   
+    p <- ggplot(na.omit(aoc_filter[, c("dose_new", "org_f", "effect_f")]), aes(x = dose_new, y = org_f, fill = effect_f)) +
+      plot.type + 
+      coord_trans(x = "log10") +
+      scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 10),
+                         labels = trans_format("log10", scales::math_format(10^.x))) +
+      scale_y_discrete(limits=rev)+
+      color.type +
+      fill.type +
+      geom_text(data = aoc_org1, 
+                aes(label = paste("(",measurements,",",studies,")"),
+                  y = org_f,
+                  x = Inf,
+                  hjust = 1),
+                position = position_dodge(.9),
+                size = 4.5)+
+      theme.type +
+      theme(text = element_text(size=18), 
+            legend.position = "right") +
+      labs(x = paste0(input$dose_check,", Alignment = ",input$ERM_check),
+           y = "Organism",
+           color = "Effect?",
+           fill = "Effect?",
+           caption = (input$Rep_Con_rad))%>%
+        req(nrow(aoc_filter()) > 0)
+    
+    print(p)
+
+  })
+  
+  output$organism_plot_react <- renderPlot({
+    
+    organism_plot_react()
+    
+  })
+  
+  # Size Plot
+  
+  size_plot_react <- eventReactive(list(input$go),{
+
+    
+    #plot types
+    plot.type<-switch(input$plot.type,
+                      "boxplot" 	= geom_boxplot(alpha = 0.8, aes(color = effect_f)),
+                      "violin" = geom_violin(alpha = 0.8, aes(color = effect_f)),
+                      "beeswarm" = geom_quasirandom(alpha = 0.8, aes(color = effect_f), 
+                                                    method = "smiley", groupOnX = FALSE, cex = 2)) #groupOnX specifies groups on y axis
+    
+    #Theme type
+    theme.type<-switch(input$theme.type_exp,
+                       "light" 	= theme_classic(),
+                       "dark" = dark_theme_bw()) 
+    #color selection
+    fill.type <- switch(input$color.type_exp,
+                        "default" =  scale_fill_manual(values = c("#A1CAF6", "#4C6FA1")),
+                        "viridis" = scale_fill_viridis(discrete = TRUE),
+                        "brewer" =  scale_fill_brewer(palette = "Paired"),
+                        "tron" = scale_fill_tron(),
+                        "locusZoom" = scale_fill_locuszoom(),
+                        "d3" = scale_fill_d3(),
+                        "Nature" = scale_fill_npg(),
+                        "JAMA" = scale_fill_jama())
+    #color selection
+    color.type <- switch(input$color.type_exp,
+                         "default" =  scale_color_manual(values = c("#A1CAF6", "#4C6FA1")),
+                         "viridis" = scale_color_viridis(discrete = TRUE),
+                         "brewer" =  scale_color_brewer(palette = "Paired"),
+                         "tron" = scale_color_tron(),
+                         "locusZoom" = scale_color_locuszoom(),
+                         "d3" = scale_color_d3(),
+                         "Nature" = scale_color_npg(),
+                         "JAMA" = scale_color_jama())
+    
+    #Mini data set for measurement and study labels
+    aoc_size1 <- aoc_filter() %>%
+      drop_na(dose_new) %>%
+      group_by(size_f, effect_f) %>% # need to include so there's a recognized "y"
+      summarize(dose_new = quantile(dose_new, .1), # need for recognized "x"
+                measurements = n(),
+                studies = n_distinct(article))
+    
+    p <- ggplot(na.omit(aoc_filter()[, c("dose_new", "size_f", "effect_f")]), aes(x = dose_new, y = size_f, fill = effect_f)) +
+      plot.type + 
+      coord_trans(x = "log10") +
+      scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 10),
+                         labels = trans_format("log10", scales::math_format(10^.x))) +
+      scale_y_discrete(limits=rev)+
+      fill.type +  
+      color.type + 
+      geom_text(data = aoc_size1, 
+                aes(label = paste("(",measurements,",",studies,")"),
+                    y = size_f,
+                    x = Inf,
+                    hjust = 1),
+                position = position_dodge(.9),
+                size = 4.5)+
+      theme.type + 
+      theme(text = element_text(size=18), 
+        legend.position = "right") +
+      labs(x = paste0(input$dose_check,", Alignment = ",input$ERM_check),
+        y = "Size",
+        color = "Effect?",
+        fill = "Effect?",
+        caption = (input$Rep_Con_rad))%>%
+      req(nrow(aoc_filter()) > 0)
+    
+    print(p)
+
+  })
+  
+  output$size_plot_react <- renderPlot({
+    
+    size_plot_react()
+    
+  })
+  
+  # Shape Plot
+  
+  shape_plot_react <- eventReactive(list(input$go),{
+    
+    #plot types
+    plot.type<-switch(input$plot.type,
+                      "boxplot" 	= geom_boxplot(alpha = 0.8, aes(color = effect_f)),
+                      "violin" = geom_violin(alpha = 0.8, aes(color = effect_f)),
+                      "beeswarm" = geom_quasirandom(alpha = 0.8, aes(color = effect_f), 
+                                                    method = "smiley", groupOnX = FALSE, cex = 2)) #groupOnX specifies groups on y axis
+    #Theme type
+    theme.type<-switch(input$theme.type_exp,
+                       "light" 	= theme_classic(),
+                       "dark" = dark_theme_bw()) 
+    #color selection
+    fill.type <- switch(input$color.type_exp,
+                        "default" =  scale_fill_manual(values = c("#C7EAE5","#35978F")),
+                        "viridis" = scale_fill_viridis(discrete = TRUE),
+                        "brewer" =  scale_fill_brewer(palette = "Paired"),
+                        "tron" = scale_fill_tron(),
+                        "locusZoom" = scale_fill_locuszoom(),
+                        "d3" = scale_fill_d3(),
+                        "Nature" = scale_fill_npg(),
+                        "JAMA" = scale_fill_jama())
+    #color selection
+    color.type <- switch(input$color.type_exp,
+                         "default" =  scale_color_manual(values = c("#C7EAE5","#35978F")),
+                         "viridis" = scale_color_viridis(discrete = TRUE),
+                         "brewer" =  scale_color_brewer(palette = "Paired"),
+                         "tron" = scale_color_tron(),
+                         "locusZoom" = scale_color_locuszoom(),
+                         "d3" = scale_color_d3(),
+                         "Nature" = scale_color_npg(),
+                         "JAMA" = scale_color_jama())
+    
+    #Mini data set for measurement and study labels
+    aoc_shape1 <- aoc_filter() %>%
+    #aoc_shape1 <- aoc_filter %>%
+      drop_na(dose_new) %>%
+      group_by(shape_f, effect_f) %>% # need to include so there's a recognized "y"
+      summarize(dose_new = quantile(dose_new, .1), # need for recognized "x"
+                measurements = n(),
+                studies = n_distinct(article))
+    
+    p <- ggplot(na.omit(aoc_filter()[, c("dose_new", "shape_f", "effect_f")]), aes(x = dose_new, y = shape_f, fill = effect_f)) +
+      coord_trans(x = "log10") +
+      scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 10),
+                         labels = trans_format("log10", scales::math_format(10^.x))) +
+      scale_y_discrete(limits=rev)+
+      plot.type + 
+      fill.type + 
+      color.type + 
+      geom_text(data = aoc_shape1, 
+                aes(label = paste("(",measurements,",",studies,")"),
+                    y = shape_f,
+                    x = Inf,
+                    hjust = 1),
+                position = position_dodge(.9),
+                size = 4.5)+
+      theme.type + 
+      theme(text = element_text(size=18), 
+        legend.position = "right") +
+      labs(x = paste0(input$dose_check,", Alignment = ",input$ERM_check),
+        y = "Shape",
+        color = "Effect?",
+        fill = "Effect?",
+        caption = (input$Rep_Con_rad))%>%
+      req(nrow(aoc_filter()) > 0)
+    
+    print(p)
+    
+  })
+  
+  output$shape_plot_react <- renderPlot({
+    
+    shape_plot_react()
+    
+  })
+  
+  # Polymer Plot
+  
+  poly_plot_react <- eventReactive(list(input$go),{
+    
+    #plot types
+    plot.type<-switch(input$plot.type,
+                      "boxplot" 	= geom_boxplot(alpha = 0.8, aes(color = effect_f)),
+                      "violin" = geom_violin(alpha = 0.8, aes(color = effect_f)),
+                      "beeswarm" = geom_quasirandom(alpha = 0.8, aes(color = effect_f), 
+                                                    method = "smiley", groupOnX = FALSE, cex = 2)) #groupOnX specifies groups on y axis
+    
+    #Theme type
+    theme.type<-switch(input$theme.type_exp,
+                       "light" 	= theme_classic(),
+                       "dark" = dark_theme_bw()) 
+    #color selection
+    fill.type <- switch(input$color.type_exp,
+                        "default" =  scale_fill_manual(values = c("#FAB455", "#A5683C")),
+                        "viridis" = scale_fill_viridis(discrete = TRUE),
+                        "brewer" =  scale_fill_brewer(palette = "Paired"),
+                        "tron" = scale_fill_tron(),
+                        "locusZoom" = scale_fill_locuszoom(),
+                        "d3" = scale_fill_d3(),
+                        "Nature" = scale_fill_npg(),
+                        "JAMA" = scale_fill_jama())
+    #color selection
+    color.type <- switch(input$color.type_exp,
+                         "default" =  scale_color_manual(values = c("#FAB455", "#A5683C")),
+                         "viridis" = scale_color_viridis(discrete = TRUE),
+                         "brewer" =  scale_color_brewer(palette = "Paired"),
+                         "tron" = scale_color_tron(),
+                         "locusZoom" = scale_color_locuszoom(),
+                         "d3" = scale_color_d3(),
+                         "Nature" = scale_color_npg(),
+                         "JAMA" = scale_color_jama())
+    
+    #Mini data set for measurement and study labels
+    aoc_poly1 <- aoc_filter() %>%
+      drop_na(dose_new) %>%
+      group_by(poly_f, effect_f) %>% # need to include so there's a recognized "y"
+      summarize(dose_new = quantile(dose_new, .1), # need for recognized "x"
+                measurements = n(),
+                studies = n_distinct(article))
+    
+    p <- ggplot(na.omit(aoc_filter()[, c("dose_new", "poly_f", "effect_f")]), aes(x = dose_new, y = poly_f, fill = effect_f)) +
+      coord_trans(x = "log10") +
+      scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 10),
+                         labels = trans_format("log10", scales::math_format(10^.x))) +
+      scale_y_discrete(limits=rev)+
+      plot.type + 
+      color.type +
+      fill.type +
+      geom_text(data = aoc_poly1, 
+                aes(label = paste("(",measurements,",",studies,")"),
+                    y = poly_f,
+                    x = Inf,
+                    hjust = 1),
+                position = position_dodge(.9),
+                size = 4.5)+
+     theme.type +
+      theme(text = element_text(size=18),
+        legend.position = "right") +
+      labs(x = paste0(input$dose_check,", Alignment = ",input$ERM_check),
+        y = "Polymer",
+        color = "Effect?",
+        fill = "Effect?",
+        caption = (input$Rep_Con_rad))%>%
+      req(nrow(aoc_filter()) > 0)
+    
+    print(p)
+    
+  })
+  
+  output$poly_plot_react <- renderPlot({
+    
+    poly_plot_react()
+    
+  })
+  
+  # Endpoint Plot
+  
+  lvl_plot_react <- eventReactive(list(input$go),{
+    
+    #plot types
+    plot.type<-switch(input$plot.type,
+                      "boxplot" 	= geom_boxplot(alpha = 0.8, aes(color = effect_f)),
+                      "violin" = geom_violin(alpha = 0.8, aes(color = effect_f)),
+                      "beeswarm" = geom_quasirandom(alpha = 0.8, aes(color = effect_f), 
+                                                    method = "smiley", groupOnX = FALSE, cex = 2)) #groupOnX specifies groups on y axis
+    
+    #Theme type
+    theme.type<-switch(input$theme.type_exp,
+                       "light" 	= theme_classic(),
+                       "dark" = dark_theme_bw()) 
+    #color selection
+    fill.type <- switch(input$color.type_exp,
+                        "default" =  scale_fill_manual(values = c("#A99CD9", "#6C568C")),
+                        "viridis" = scale_fill_viridis(discrete = TRUE),
+                        "brewer" =  scale_fill_brewer(palette = "Paired"),
+                        "tron" = scale_fill_tron(),
+                        "locusZoom" = scale_fill_locuszoom(),
+                        "d3" = scale_fill_d3(),
+                        "Nature" = scale_fill_npg(),
+                        "JAMA" = scale_fill_jama())
+    #color selection
+    color.type <- switch(input$color.type_exp,
+                         "default" =  scale_color_manual(values = c("#A99CD9", "#6C568C")),
+                         "viridis" = scale_color_viridis(discrete = TRUE),
+                         "brewer" =  scale_color_brewer(palette = "Paired"),
+                         "tron" = scale_color_tron(),
+                         "locusZoom" = scale_color_locuszoom(),
+                         "d3" = scale_color_d3(),
+                         "Nature" = scale_color_npg(),
+                         "JAMA" = scale_color_jama())
+    
+    #Mini data set for measurement and study labels
+    aoc_lvl1_1 <- aoc_filter() %>%
+      drop_na(dose_new) %>%
+      group_by(lvl1_f, effect_f) %>% # need to include so there's a recognized "y"
+      summarize(dose_new = quantile(dose_new, .1), # need for recognized "x"
+                measurements = n(),
+                studies = n_distinct(article))
+    
+    p <- ggplot(na.omit(aoc_filter()[, c("dose_new", "lvl1_f", "effect_f")]), aes(x = dose_new, y = lvl1_f, fill = effect_f)) +
+      coord_trans(x = "log10") +
+      scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 10),
+                         labels = trans_format("log10", scales::math_format(10^.x))) +
+      scale_y_discrete(limits=rev)+
+      plot.type + 
+      color.type +
+      fill.type +
+      geom_text(data = aoc_lvl1_1, 
+                aes(label = paste("(",measurements,",",studies,")"),
+                    y = lvl1_f,
+                    x = Inf,
+                    hjust = 1),
+                position = position_dodge(.9),
+                size = 4.5)+
+      theme.type +
+      theme(text = element_text(size=18),
+        legend.position = "right") +
+      labs(x = paste0(input$dose_check,", Alignment = ",input$ERM_check),
+        y = "Endpoint",
+        color = "Effect?",
+        fill = "Effect?",
+        caption = (input$Rep_Con_rad))%>%
+      req(nrow(aoc_filter()) > 0)
+    
+    print(p)
+    
+  })
+  
+  output$lvl_plot_react <- renderPlot({
+    
+    lvl_plot_react()
+    
+  })
+  
+  lvl2_plot_react <- eventReactive(list(input$go),{
+    
+    #plot types
+    plot.type<-switch(input$plot.type,
+                      "boxplot" 	= geom_boxplot(alpha = 0.8, aes(color = effect_f)),
+                      "violin" = geom_violin(alpha = 0.8, aes(color = effect_f)),
+                      "beeswarm" = geom_quasirandom(alpha = 0.8, aes(color = effect_f), 
+                                                    method = "smiley", groupOnX = FALSE, cex = 2)) #groupOnX specifies groups on y axis
+    
+    #Theme type
+    theme.type<-switch(input$theme.type_exp,
+                       "light" 	= theme_classic(),
+                       "dark" = dark_theme_bw()) 
+    #color selection
+    fill.type <- switch(input$color.type_exp,
+                        "default" =  scale_fill_manual(values = c("#A99CD9", "#6C568C")),
+                        "viridis" = scale_fill_viridis(discrete = TRUE),
+                        "brewer" =  scale_fill_brewer(palette = "Paired"),
+                        "tron" = scale_fill_tron(),
+                        "locusZoom" = scale_fill_locuszoom(),
+                        "d3" = scale_fill_d3(),
+                        "Nature" = scale_fill_npg(),
+                        "JAMA" = scale_fill_jama())
+    #color selection
+    color.type <- switch(input$color.type_exp,
+                         "default" =  scale_color_manual(values = c("#A99CD9", "#6C568C")),
+                         "viridis" = scale_color_viridis(discrete = TRUE),
+                         "brewer" =  scale_color_brewer(palette = "Paired"),
+                         "tron" = scale_color_tron(),
+                         "locusZoom" = scale_color_locuszoom(),
+                         "d3" = scale_color_d3(),
+                         "Nature" = scale_color_npg(),
+                         "JAMA" = scale_color_jama())
+    
+    #Mini data set for measurement and study labels
+    aoc_lvl2_1 <- aoc_filter() %>%
+      drop_na(dose_new) %>%
+      group_by(lvl2_f, effect_f) %>% # need to include so there's a recognized "y"
+      summarize(dose_new = quantile(dose_new, .1), # need for recognized "x"
+                measurements = n(),
+                studies = n_distinct(article))
+    
+  p <- ggplot(na.omit(aoc_filter()[, c("dose_new", "lvl2_f", "effect_f")]), aes(x = dose_new, y = lvl2_f, fill = effect_f)) +
+    coord_trans(x = "log10") +
+    scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 10),
+                       labels = trans_format("log10", scales::math_format(10^.x))) +
+    scale_y_discrete(limits=rev)+
+    plot.type +
+    color.type +
+    fill.type +
+    geom_text(data = aoc_lvl2_1, 
+              aes(label = paste("(",measurements,",",studies,")"),
+                  y = lvl2_f,
+                  x = Inf,
+                  hjust = 1),
+              position = position_dodge(.9),
+              size = 4.5)+
+    theme.type +
+      theme(text = element_text(size=18),
+            legend.position = "right") +
+      labs(x = paste0(input$dose_check,", Alignment = ",input$ERM_check),
+           y = "Specific Endpoint",
+           color = "Effect?",
+           fill = "Effect?",
+           caption = (input$Rep_Con_rad))%>%
+      req(nrow(aoc_filter()) > 0)
+  
+  print(p)
+  
+  })
+  
+  output$lvl2_plot_react <- renderPlot(
+    
+    #dynamic plot height based on widget input
+    height = function()if_else(600 < n_distinct(input$lvl2_check)*40, n_distinct(input$lvl2_check)*40, 600),
+    
+    {
+    
+    lvl2_plot_react()
+    
+  })
+  
+   # Create downloadable png for exploration plots
+  
+  #organism group
+  output$downloadexploration_org <- downloadHandler(
+    
+    filename = function() {
+      paste('Organism_Group', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      ggsave(file, plot = organism_plot_react(), width = 16, height = 8, device = 'png')
+    })
+  
+  #size
+  output$downloadexploration_size <- downloadHandler(
+    
+    filename = function() {
+      paste('Size', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      ggsave(file, plot = size_plot_react(), width = 16, height = 8, device = 'png')
+    })
+  
+  #shape
+  output$downloadexploration_shape <- downloadHandler(
+    
+    filename = function() {
+      paste('Shape', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      ggsave(file, plot = shape_plot_react(), width = 16, height = 8, device = 'png')
+    })
+  
+  #polymer
+  output$downloadexploration_poly <- downloadHandler(
+    
+    filename = function() {
+      paste('Polymer', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      ggsave(file, plot = poly_plot_react(), width = 16, height = 8, device = 'png')
+    })
+  
+  #lvl1
+  output$downloadexploration_lvl1 <- downloadHandler(
+    
+    filename = function() {
+      paste('Broad_Endpoint', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      ggsave(file, plot = lvl_plot_react(), width = 16, height = 8, device = 'png')
+    })
+  
+  #lvl2
+  output$downloadexploration_lvl2 <- downloadHandler(
+    
+    filename = function() {
+      paste('Specific_Endpoint', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      
+      ggsave(file, plot = lvl2_plot_react(), width = 30, height = 20, device = 'png')
+    })
+  
+  
+  # Create downloadable csv of filtered dataset
+  output$downloadData <- downloadHandler(
+    filename = paste('ToMEx_Exploration', Sys.Date(), '.csv', sep=''),
+    content = function(file) {
+      
+      aoc_filter_tidy <- aoc_filter() %>%
+        drop_na(dose_new) %>%
+        mutate(Alignment = input$ERM_check) %>% 
+        mutate(`Dose Metric` = input$dose_check) %>% 
+        mutate(`Unaligned Dose Values` = case_when(
+            input$dose_check == "Particles/mL" ~ dose.particles.mL.master,
+            input$dose_check == "µg/mL" ~ dose.mg.L.master,
+            input$dose_check == "µm3/mL" ~ dose.um3.mL.master,
+            input$dose_check == "µm2/mL" ~ dose.um2.mL.master,
+            input$dose_check == "µm2/µg/mL" ~ dose.um2.ug.mL.master,
+            input$dose_check == "Particles/kg sediment" ~ dose.particles.kg.sediment.master,
+            input$dose_check == "mg/kg sediment" ~ dose.mg.kg.sediment.master,
+            input$dose_check == "µm3/kg sediment" ~ dose.um3.kg.sediment.master,
+            input$dose_check == "µm2/kg sediment" ~ dose.um2.kg.sediment.master,
+            input$dose_check == "µm2/µg/kg sediment" ~ dose.um2.ug.kg.sediment.master)) %>%  
+        #Select columns
+        dplyr::select(c(doi, authors, year, species_f, org_f, env_f, life_f, vivo_f, sex, body.length.cm, max.size.ingest.mm,
+                        #experimental parameters
+                        exp_type_f, exposure.route, mix, negative.control, reference.material, exposure.media, solvent, detergent,
+                        media.ph, media.sal.ppt, media.temp, media.temp.min, media.temp.max, exposure.duration.d, `Recovery (Days)`, acute.chronic_f,
+                        treatments, replicates, sample.size, dosing.frequency, chem.add.nominal, chem.add.dose.mg.L.nominal, chem.add.dose.mg.L.measured,
+                        #selected dose
+                        dose_new, `Unaligned Dose Values`, `Dose Metric`, Alignment,
+                        #biological effects
+                        effect_f, direction, lvl1_f, lvl2_f, lvl3_f, bio_f, target.cell.tissue, effect.metric,
+                        #particle characteristics
+                        poly_f, shape_f, density.g.cm3, density.reported.estimated, charge, zetapotential.mV, zetapotential.media, functional.group,
+                        size.length.um.used.for.conversions, size.width.um.used.for.conversions, size_f, particle.surface.area.um2, particle.volume.um3,
+                        mass.per.particle.mg, weather.biofoul_f,
+                        #quality
+                        size.valid, polymer.valid, shape.valid, particle.source, sodium.azide, contaminant.screen, clean.method, sol.rinse, background.plastics,
+                        concentration.valid, particle.behavior, uptake.valid, uptake.valid.method, tissue.distribution, fed)) %>%
+       #Rename columns
+       dplyr::rename(c("DOI" = doi, "Authors" = authors, "Year" = year, "Species" = species_f, "Organism Group" = org_f, "Environment" = env_f,
+            "Life Stage" = life_f, "In vitro/in vivo" = vivo_f, "Sex" = sex, "Estimated Body Length (cm)" = body.length.cm,
+            "Estimated Maximum Ingestible Size (mm)" = max.size.ingest.mm,
+             #experimental parameters
+            "Experiment Type" = exp_type_f, "Exposure Route" = exposure.route, "Particle Mix?" = mix, "Negative Control" = negative.control,
+             "Reference Particle" = reference.material, "Exposure Media" = exposure.media, "Solvent" = solvent, "Detergent" = detergent,
+            "pH" = media.ph, "Salinity (ppt)" = media.sal.ppt, "Temperature (Avg)" = media.temp, "Temperature (Min)"= media.temp.min,
+            "Temperature (Max)" = media.temp.max, "Exposure Duration (days)" = exposure.duration.d, "Acute/Chronic" = acute.chronic_f,
+            "Number of Doses" = treatments, "Replicates" = replicates, "Sample Size" = sample.size, "Dosing Frequency" = dosing.frequency,
+            "Chemicals Added" = chem.add.nominal, "Added Chemical Dose (nominal)" = chem.add.dose.mg.L.nominal,
+            "Added Chemical Dose (measured)" = chem.add.dose.mg.L.measured,
+             #selected dose
+            "Plotted Dose Values" = dose_new,
+             #biological effects
+            "Effect" = effect_f, "Direction" = direction, "Broad Endpoint Category" = lvl1_f, "Specific Endpoint Category" = lvl2_f,
+            "Endpoint" = lvl3_f, "Level of Biological Organization" = bio_f, "Target Cell or Tissue" = target.cell.tissue,
+             "Effect Metric" = effect.metric,
+             #particle characteristics
+            "Polymer" = poly_f, "Shape" = shape_f, "Density (g/cm^3)" = density.g.cm3, "Density, reported or estimated" = density.reported.estimated,
+            "Charge" = charge, "Zeta Potential (mV)" = zetapotential.mV, "Zeta Potential Media" = zetapotential.media, "Functional Group" = functional.group,
+            "Particle Length (μm)" = size.length.um.used.for.conversions, "Particle Width (μm)" = size.width.um.used.for.conversions,
+            "Size Category" = size_f, "Particle Surface Area (μm^2)" = particle.surface.area.um2, "Particle Volume (μm^3)" = particle.volume.um3,
+            "Particle Mass (mg)" = mass.per.particle.mg, "Weathered or Biofouled?" = weather.biofoul_f,
+             #quality
+             "Size Validated?" = size.valid, "Polymer Validated?" = polymer.valid, "Shape Validated" = shape.valid, "Particle Source" = particle.source,
+            "Sodium Azide Present?" = sodium.azide, "Screened for Chemical Contamination?" = contaminant.screen, "Particle Cleaning?" = clean.method,
+            "Solvent Rinse" = sol.rinse, "Background Contamination Monitored?" = background.plastics,
+            "Concentration Validated?"  = concentration.valid, "Particle Behavior" = particle.behavior, "Uptake Validated?" = uptake.valid,
+            "Uptake Validation Method" = uptake.valid.method, "Tissue Distribution" = tissue.distribution, "Organisms Fed?" = fed)) 
+  
+      readr::write_excel_csv(aoc_filter_tidy, file)
+    }
+  )
+
+  # Create "reset" button to revert all filters back to what they began as.
+  # Need to call all widgets individually by their ids.
+  # See https://stackoverflow.com/questions/44779775/reset-inputs-with-reactive-app-in-shiny for more information.
+  observeEvent(input$reset_input, {
+    shinyjs::reset("exp_type_check")
+    shinyjs::reset("lvl1_check")
+    shinyjs::reset("lvl2_check")
+    shinyjs::reset("poly_check")
+    shinyjs::reset("organism_check")
+    shinyjs::reset("shape_check")
+    shinyjs::reset("env_check")
+    shinyjs::reset("effect_check")
+    shinyjs::reset("size_check")
+    shinyjs::reset("life_check")
+    shinyjs::reset("bio_check")
+    shinyjs::reset("species_check")
+    shinyjs::reset("tech_tier_zero_check")
+    shinyjs::reset("risk_tier_zero_check")
+    shinyjs::reset("Rep_Con_rad")
+    shinyjs::reset("dose_check")
+    shinyjs::reset("ERM_check")
+    shinyjs::reset("alpha.value.matrix")
+    shinyjs::reset("alpha")
+    shinyjs::reset("a.sa")
+    shinyjs::reset("a.v")
+    shinyjs::reset("a.m")
+    shinyjs::reset("a.ssa")
+    shinyjs::reset("R.ave")
+    shinyjs::reset("p.ave")
+    shinyjs::reset("lower_length")
+    shinyjs::reset("xmin_calculator")
+    shinyjs::reset("length_alpha_calculator")
+    shinyjs::reset("particle.count_calculator")
+    
+  }) #If we add more widgets, make sure they get added here. 
+
+#### SSD S ####
+
+  ###### Alpha Value Radio Buttons ######
+  observe_alpha_updates("alpha.value.matrix_ssd", "_ssd", input, session)
+  
+  # Create new all tested dataset based on widget filtering and adjusted to reflect the presence of the "update" button.
+  aoc_ssd_filtered <- eventReactive(list(input$SSDgo),{
+    req(input$alpha_ssd, input$upper_length_ssd, input$lower_length_ssd)
+    validate(
+      need(length(input$alpha_ssd) == length(input$upper_length_ssd) &&
+             length(input$alpha_ssd) == length(input$lower_length_ssd),
+           "Inputs must have the same length.")
+    )
+    
+    # eventReactive explicitly delays activity until you press the button
+    # here we'll use the inputs to create a new dataset that will be fed into the renderPlot calls below
+    exp_type_c_ssd <- input$exp_type_check_ssd
+    env_c_ssd <- input$env_check_ssd #assign environments
+    Group_c_ssd <- input$Group_check_ssd # assign organism input values to "org_c"
+    Species_c_ssd <- input$Species_check_ssd #assign species input
+    size_c_ssd <- input$size_check_ssd #assign sizes input
+    lvl1_c_ssd <- input$lvl1_check_ssd #assign broad endpoints
+    lvl2_c_ssd <- input$lvl2_check_ssd #assign specific endpoints
+    poly_c_ssd <- input$poly_check_ssd #assign polymers
+    shape_c_ssd <- input$shape_check_ssd #assign shapes
+    effect_metric_rad <- input$effect.metric_rad_ssd #effect metric filtering
+    bio_c_ssd <- input$bio_check_ssd #assign bio org input
+    acute.chronic.c_ssd <- input$acute.chronic_check_ssd #acute chronic checkbox
+    AF.time_r_ssd <- input$AF.time_rad_ssd #yes/no apply assessment factor for acute -> chronic
+    AF.noec_r_ssd <- input$AF.noec_rad_ssd #yes/no apply assessment factor for LOEC/ECXX -> NOEC
+    Rep_Con_rad <- input$Reported_Converted_rad #use nominal or calculated exposure concentrations. Options are TRUE (calculated) or FALSE (reported)
+    ERM_check <- input$ERM_check_ssd #ERM
+    dose_check <- input$dose_check_ssd #rename variable
+    tech_tier_zero_c_ssd<-input$tech_tier_zero_check_ssd #assign values to "design_tier_zero_c"
+    risk_tier_zero_c_ssd<-input$risk_tier_zero_check_ssd #assign values to "risk_tier_zero_c"
+    
+    ## ERM parametrization ##
+    # Define params for alignments #
+    alpha.input = as.numeric(input$alpha_ssd) #length power law exponent
+    x2D_set = as.numeric(input$upper_length_ssd) #upper size range (default)
+    x1D_set = as.numeric(input$lower_length_ssd) #lower size range (default)
+    x1M_set = as.numeric(input$lower_length_ssd) #lower size range for ingestible plastic (user defined)
+    upper.tissue.trans.size.um <- as.numeric(input$upper.tissue.trans.size.um_ssd) #user-defined upper value for tissue trans (numeric)
+    ingestion.translocation.switch <- input$ingestion.translocation.switch_ssd #user-defined: inputs are "ingestion" or "translocation"
+    
+    # define parameters for power law coefficients
+    a.sa.input = as.numeric(input$a.sa_ssd) #1.5 #marine surface area power law
+    a.v.input = as.numeric(input$a.v_ssd) #1.48 #a_V for marine surface water volume
+    a.m.input = as.numeric(input$a.m_ssd) #1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa.input = as.numeric(input$a.ssa_ssd) #1.98 # A_SSA for marine surface water
+    
+    #define additional parameters for calculations based on averages in the environment
+    R.ave.input = as.numeric(input$R.ave_ssd) #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave.input = as.numeric(input$p.ave_ssd) #1.10 #average density in marine surface water
+    H_W_ratio.input = as.numeric(input$H_W_ratio_ssd)
+    
+    print(paste("Performing alignments for:", "alpha:", alpha.input, "x2D_set:", x2D_set,
+                "x1D_set:", x1D_set, "x1M_set:", x1M_set, "a.sa:", a.sa.input, "a.v:", a.v.input,
+                "a.m:", a.m.input, "a.ssa:", a.ssa.input, "R.ave:", R.ave.input, "p.ave:", p.ave.input))
+  
+
+    # calculate ERM for each species
+    aoc_z <- aoc_z %>%
+      # explicitly add vars to dataframe instead of leaving as global vars - otherwise mux.poly.generalizable fnx will fail
+      mutate(alpha = alpha.input,
+             x2D_set = x2D_set,
+             x1D_set = x1D_set,
+             x1M_set = x1M_set,
+             upper.tissue.trans.size.um = upper.tissue.trans.size.um,
+             ingestion.translocation.switch = ingestion.translocation.switch,
+             a.sa = a.sa.input,
+             a.v = a.v.input,
+             a.m = a.m.input,
+             a.ssa = a.ssa.input,
+             R.ave = R.ave.input,
+             p.ave = p.ave.input,
+             H_W_ratio = H_W_ratio.input #default in Kooi et al. (2021)
+             ) %>% 
+      ### BIOACCESSIBILITY ###
+      # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
+      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
+                                    max.size.ingest.um < x2D_set ~ max.size.ingest.um,
+                                    max.size.ingest.um > x2D_set ~ x2D_set)) %>%  #set to default as upper limit or max size ingest, whichever is smaller
+      # define upper size length for Translocation 
+      mutate(x2M_trans = case_when(is.na(max.size.ingest.um) ~ upper.tissue.trans.size.um, 
+                                   max.size.ingest.um  < upper.tissue.trans.size.um ~  max.size.ingest.um,
+                                   max.size.ingest.um  > upper.tissue.trans.size.um ~ upper.tissue.trans.size.um)) %>% 
+      #define which bioaccessibility limit to use for calculations based on user input
+      mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
+      mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
+                             ingestion.translocation == "translocation" ~ x2M_trans,
+                             ingestion.translocation == "none" ~ x2D_set)) %>% 
+      #calculate CF_bio for all conversions
+      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
+      ###############################################################################
+    ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
+    ######################################################################################
+    ## assign whether polydisperse data are partially, fully, or not bioavailable
+    mutate(ingestible_poly = case_when(
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (all)",
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (some)",
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions > x2M_ingest ~ "not ingestible"),
+      translocatable_poly = case_when(
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (all)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
+    ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
+      # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
+      ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
+    mutate(size.length.max.um.used.for.conversions = case_when(
+      is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
+      !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000)) %>% 
+      # correct for partially translocatable particles
+      mutate(CF_bioavailable_trans = case_when(translocatable_poly == "translocatable (some)" ~ CFfnx(a = alpha,
+                                                                                                      x1D = size.length.min.um.used.for.conversions,
+                                                                                                      x2D = x2M_trans,
+                                                                                                      x1M = size.length.min.um.used.for.conversions,
+                                                                                                      x2M = size.length.max.um.used.for.conversions),
+                                               T ~ 1)) %>% # all other cases retain original dose
+      # now correct the dosage (will be fraction )
+      mutate(dose.particles.mL.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.mL.master,
+                                                 T ~ dose.particles.mL.master),
+             dose.particles.kg.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.kg.sediment.master,
+                                                 T ~ dose.particles.kg.sediment.master)) %>% 
+      # correct for partially ingestible particles
+      mutate(CF_bioavailable_ingest = case_when(ingestible_poly == "ingestible (some)" ~ CFfnx(a = alpha,
+                                                                                               x1D = size.length.min.um.used.for.conversions,
+                                                                                               x2D = x2M_ingest,
+                                                                                               x1M = size.length.min.um.used.for.conversions,
+                                                                                               x2M = size.length.max.um.used.for.conversions),
+                                                T ~ 1)) %>% 
+      mutate(dose.particles.mL.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.mL.master,
+                                                  T ~ dose.particles.mL.master),
+             dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
+                                                  T ~ dose.particles.kg.sediment.master)
+      ) %>% 
+      # correct for particles when no bioavailability filter selected by user
+      mutate(dose.particles.mL.no_filter = CF_bio * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF_bio * dose.particles.kg.sediment.master) %>% 
+        ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    ## calculate size parameters using compartment characteristics
+    ##### re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
+    ##### ----- LENGTH ------ ###
+    # no need to correct monodisperse. Min for polydispserse remains same #
+    ## polydisperse ##
+    mutate(size.length.max.um.trans = case_when(translocatable_poly == "translocatable (some)" ~ x2M_trans,
+                                                T ~ size.length.max.um.used.for.conversions),
+           size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
+                                                 T ~ size.length.max.um.used.for.conversions)) %>% 
+      ##### ----- WIDTH ------ ###
+      ## Monodisperse ##
+      mutate(size.width.um.used.for.conversions = case_when(
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        is.na(size.width.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # W = L for spheres
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
+        T ~ size.width.um.used.for.conversions # if available, use as-is
+      )) %>% 
+      ### Polydisperse ###
+      # Min is always same #
+      # calculate size parameters using compartment characteristics
+      mutate(size.width.min.um.used.for.conversions = case_when(
+        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
+        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
+        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+      ### Max depends on ingest/trans limits ###
+      # TRANS #
+      mutate(size.width.max.um.trans = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # INGEST #
+      mutate(size.width.max.um.ingest = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # No bioavailability #
+      mutate(size.width.max.um.used.for.conversions = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      
+      ###### ------ HEIGHT ----- ##### 
+    ## Monodisperse ##
+    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+    mutate(size.height.um.used.for.conversions = case_when(
+      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+    )) %>% 
+      ### Polydisperse ##
+      ## Min is always same ##
+      mutate(size.height.min.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%  # environment AND average height to width ratio (kooi et al 2021)
+      # trans #
+      mutate(size.height.max.um.trans = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # Ingest # 
+      mutate(size.height.max.um.ingest = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # No bioavailability #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+     
+      
+      ############ ------ Volume ------ ##########
+    ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    #### Monodisperse ##
+    # calculate volume for monodisperse particles #
+    mutate(particle.volume.um3 = volumefnx(R = R.ave,
+                                           length = size.length.um.used.for.conversions, 
+                                           width = size.width.um.used.for.conversions,
+                                           height = size.height.um.used.for.conversions
+    )) %>% 
+      #### Polydisperse ##
+      mutate(particle.volume.um3.min = volumefnx(R = R.ave, 
+                                                 length = size.length.min.um.used.for.conversions,
+                                                 width = size.width.min.um.used.for.conversions, 
+                                                 height = size.height.min.um.used.for.conversions)) %>% 
+      ### Trans ##
+      # calculate min and max volume when polydisperse particles are used (being sure to use ingestion-restricted sizes)
+      # calculate max volume when polydisperse particles are used (translocation-limited)
+      mutate(particle.volume.um3.max.trans = volumefnx(R = R.ave,
+                                                       length = size.length.max.um.trans,
+                                                       width = size.width.max.um.trans, 
+                                                       height = size.height.max.um.trans)) %>%
+      ### Ingest  ##
+      # calculate max volume when polydisperse particles are used (ingestlocation-limited)
+      mutate(particle.volume.um3.max.ingest = volumefnx(R = R.ave,
+                                                        length = size.length.max.um.ingest,
+                                                        width = size.width.max.um.ingest, 
+                                                        height = size.height.max.um.ingest)) %>% 
+      ### No Filter ###
+      # calculate max volume when polydisperse particles are used (no bioavility fildter)
+      mutate(particle.volume.um3.max.none = volumefnx(R = R.ave,
+                                                      length = size.length.max.um.used.for.conversions,
+                                                      width = size.width.max.um.used.for.conversions, 
+                                                      height = size.height.max.um.used.for.conversions)) %>% 
+      ############ ------ Surface Area ------ ##########
+    # calculate surface are for monodisperse particles
+    mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
+                                             width = size.width.um.used.for.conversions,
+                                             height = size.height.um.used.for.conversions,
+                                             R = R.ave,
+                                             H_W_ratio = H_W_ratio)) %>% 
+      ##### Polydisperse ###
+      # calculate min/max SA for polydisperse mixtures (being sure to use translocation/ingestion-restricted polydisperse upper sizes)
+      mutate(particle.surface.area.um2.min = SAfnx(length = size.length.min.um.used.for.conversions,
+                                                   width = size.width.min.um.used.for.conversions,
+                                                   height = size.height.min.um.used.for.conversions,
+                                                   R = R.ave,
+                                                   H_W_ratio = H_W_ratio)) %>% 
+      ### Trans ## 
+      mutate(particle.surface.area.um2.max.trans = SAfnx(R = R.ave,
+                                                         H_W_ratio = H_W_ratio,
+                                                         length = size.length.max.um.trans,
+                                                         width = size.width.max.um.trans, 
+                                                         height = size.height.max.um.trans)) %>% 
+      ### Ingest ### 
+      mutate(particle.surface.area.um2.max.ingest = SAfnx(R = R.ave,
+                                                          H_W_ratio = H_W_ratio,
+                                                              length = size.length.max.um.ingest,
+                                                              width = size.width.max.um.ingest, 
+                                                              height = size.height.max.um.ingest)) %>% 
+      ### No bioavailbility filter ### 
+      mutate(particle.surface.area.um2.max.none = SAfnx(R = R.ave,
+                                                            H_W_ratio = H_W_ratio,
+                                                            length = size.length.max.um.used.for.conversions,
+                                                            width = size.width.max.um.used.for.conversions, 
+                                                            height = size.height.max.um.used.for.conversions)) %>% 
+      #calculate mass for monodisperse particles  
+      mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3    
+      #calculate minimum and maximum mass or polydisperse particles
+      mutate(mass.per.particle.mg.min = massfnx(v = particle.volume.um3.min, p = density.g.cm3) * 1e-3) %>% #equation uses g/cm3
+      # Trans
+      mutate(mass.per.particle.mg.max.trans = massfnx(v = particle.volume.um3.max.trans, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # Ingest
+      mutate(mass.per.particle.mg.max.ingest = massfnx(v = particle.volume.um3.max.ingest, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # none
+      mutate(mass.per.particle.mg.max.none = massfnx(v = particle.volume.um3.max.none, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      
+      ###### Alignments #2 #####
+    # Particle ERM #
+    # calculate effect threshold for particles (depending on selection of ingestion/translocation switch)
+    mutate(
+      EC_mono_p.particles.mL = case_when(
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "ingestion" ~ dose.particles.mL.ingest,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "ingestion" ~ dose.particles.kg.ingest,
+        
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "translocation" ~ dose.particles.mL.trans,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "translocation" ~ dose.particles.kg.trans,
+        
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "none" ~ dose.particles.mL.no_filter,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "none" ~ dose.particles.kg.no_filter
+      )
+    ) %>% 
+      #  ensure algae never considered for food dilution
+      mutate(EC_mono_p.particles.mL = case_when(
+        ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        T ~ EC_mono_p.particles.mL)) %>%
+      mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
+      mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
+      # polydisperse effect threshold for particles
+      mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
+      ## Calculate environmentally relevant effect threshold for particles
+      mutate(EC_env_p.particles.mL = EC_poly_p.particles.mL * CF_bio) %>%  #aligned particle effect concentraiton (1-5000 um)
+      
+      # Surface Area ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible surface area
+      mutate(x_LL_sa = SAfnx(length = x1D_set, 
+                             width = x1D_set, 
+                             height = x1D_set)) %>% #length-limited
+      #calculate upper ingestible surface area
+      mutate(x_UL_sa = SAfnx(length = x2M, #LENGTH-limited (less conservative assumption)
+                             width = x2M, #length-limited
+                             height = x2M)) %>%   #length-limited
+      #calculate mu_x_poly (env) for surface area
+      mutate(mu.sa.poly = mux_polyfnx(a.sa, x_UL_sa, x_LL_sa)) %>% 
+      
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.sa.mono = case_when(
+        polydispersity == "monodisperse" ~ particle.surface.area.um2, # use reported surface area in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                            x_LL = particle.surface.area.um2.min,
+                                                                                                            x_UL = particle.surface.area.um2.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                        x_LL = particle.surface.area.um2.min,
+                                                                                                        x_UL = particle.surface.area.um2.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                   x_LL = particle.surface.area.um2.min,
+                                                                                                   x_UL = particle.surface.area.um2.max.none)
+      )) %>% 
+      #calculate polydisperse effect concentration for surface area (particles/mL)
+      mutate(EC_poly_sa.particles.mL = (EC_mono_p.particles.mL * mu.sa.mono)/mu.sa.poly) %>%  
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_sa.particles.mL = EC_poly_sa.particles.mL * CF_bio) %>% 
+      
+      # Volume ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible volume 
+      mutate(x_LL_v = volumefnx(length = x1D_set,
+                                width = x1D_set,
+                                height = x1D_set
+      )) %>% 
+      #calculate maximum ingestible volume 
+      mutate(x_UL_v = volumefnx(length = x2M, #length-limited
+                                width = x2M,
+                                height = x2M
+      )) %>% #length-limited
+      # calculate mu.v.poly
+      mutate(mu.v.poly = mux_polyfnx(a.v, x_UL_v, x_LL_v)) %>% 
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.v.mono = case_when(
+        polydispersity == "monodisperse" ~ particle.volume.um3, # use reported volume in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                            x_LL = particle.volume.um3.min,
+                                                                                                            x_UL = particle.volume.um3.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                        x_LL = particle.volume.um3.min,
+                                                                                                        x_UL = particle.volume.um3.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                   x_LL = particle.volume.um3.min,
+                                                                                                   x_UL = particle.volume.um3.max.none)
+      )) %>% 
+      
+      #calculate polydisperse effect concentration for volume (particles/mL)
+      mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+      # Mass ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible mass
+      mutate(x_LL_m = massfnx(v = x_LL_v, p = p.ave)) %>% 
+      #calculate upper ingestible mass
+      mutate(x_UL_m = massfnx(v = x_UL_v, p = p.ave)) %>% #average density
+      # calculate mu.m.poly
+      mutate(mu.m.poly = mux_polyfnx(a.m, x_UL_m, x_LL_m)) %>% 
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.m.mono = case_when(
+        polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.m, 
+                                                                                                            x_LL = mass.per.particle.mg.min,
+                                                                                                            x_UL = mass.per.particle.mg.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.m, 
+                                                                                                        x_LL = mass.per.particle.mg.min,
+                                                                                                        x_UL = mass.per.particle.mg.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.none)
+      )) %>% 
+      #calculate polydisperse effect concentration for volume (particles/mL)
+      mutate(EC_poly_m.particles.mL = (EC_env_p.particles.mL * mu.m.mono)/mu.m.poly) %>%
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_m.particles.mL = EC_poly_m.particles.mL * CF_bio) %>% 
+      
+      # Specific Surface Area ERM #
+      mutate(mu.ssa.mono = mu.sa.mono/mu.m.mono) %>% #define mu_x_mono for alignment to ERM (um^2/ug)
+      #calculate lower ingestible 1/SSA
+      mutate(x_LL_ssa = SSA.inversefnx(sa = x_LL_sa, #surface area
+                                       m = x_LL_m) #mass
+      ) %>% 
+      #calculate upper ingestible SSA  (um^2/ug)
+      mutate(x_UL_ssa = SSA.inversefnx(sa = x_UL_sa, #surface area
+                                       m = x_UL_m) #mass
+      ) %>% 
+      #calculate mu_x_poly for specific surface area
+      #note that mu were calcaulted for polydisperse particles before, so not special case needed here
+      mutate(mu.ssa.inverse.poly = mux_polyfnx(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
+      #calculate polydisperse effect concentration for specific surface area (particles/mL)
+      mutate(mu.ssa.poly = 1 / mu.ssa.inverse.poly) %>%  #calculate mu_SSA from inverse
+      mutate(EC_poly_ssa.particles.mL = (EC_env_p.particles.mL * mu.ssa.mono)/mu.ssa.poly) %>% 
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_ssa.particles.mL = EC_poly_ssa.particles.mL * CF_bio) %>% 
+      
+      #######################################################
+      ### Convert to Metrics other than particles/mL ###
+    ##########################################################
+      ## convert all environmentally realistic thresholds to surface area ##
+      # particle count to surface area #
+      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to surface area #
+      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to surface area #
+      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to surface area #
+      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to surface area #
+      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to volume ##
+      # particle count to volume #
+      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to volume #
+      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to volume #
+      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to volume #
+      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to volume #
+      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to mass ##
+      # particle count to mass #
+      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to mass #
+      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to mass #
+      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to mass #
+      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to mass #
+      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to specific surface area ##
+      # particle count to specific surface area #
+      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to specific surface area #
+      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to specific surface area #
+      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to specific surface area #
+      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to specific surface area #
+      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
+   
+   
+    #Alignment Options Table
+    dose_lookup <- tribble(
+      ~dose_check,         ~ERM_check,            ~dose_col,
+      #Water-based concentrations
+      "µg/mL",             "Unaligned",           "dose.mg.L.master",
+      "Particles/mL",      "Unaligned",           "dose.particles.mL.master",
+      "µm3/mL",            "Unaligned",           "dose.um3.mL.master",
+      "µm2/mL",            "Unaligned",           "dose.um2.mL.master",
+      "µm2/µg/mL",         "Unaligned",           "dose.um2.ug.mL.master",
+      "Particles/mL",      "Particles",           "EC_env_p.particles.mL",
+      "Particles/mL",      "Surface Area",        "EC_env_sa.particles.mL",
+      "Particles/mL",      "Volume",              "EC_env_v.particles.mL",
+      "Particles/mL",      "Mass",                "EC_env_m.particles.mL",
+      "Particles/mL",      "Specific Surface Area", "EC_env_ssa.particles.mL",
+      "µm2/mL",            "Particles",           "EC_env_p.um2.mL",
+      "µm2/mL",            "Surface Area",        "EC_env_sa.um2.mL",
+      "µm2/mL",            "Volume",              "EC_env_v.um2.mL",
+      "µm2/mL",            "Mass",                "EC_env_m.um2.mL",
+      "µm2/mL",            "Specific Surface Area", "EC_env_ssa.um2.mL",
+      "µg/mL",             "Particles",           "EC_env_p.ug.mL",
+      "µg/mL",             "Surface Area",        "EC_env_sa.ug.mL",
+      "µg/mL",             "Volume",              "EC_env_v.ug.mL",
+      "µg/mL",             "Mass",                "EC_env_m.ug.mL",
+      "µg/mL",             "Specific Surface Area", "EC_env_ssa.ug.mL",
+      "µm3/mL",            "Particles",           "EC_env_p.um3.mL",
+      "µm3/mL",            "Surface Area",        "EC_env_sa.um3.mL",
+      "µm3/mL",            "Volume",              "EC_env_v.um3.mL",
+      "µm3/mL",            "Mass",                "EC_env_m.um3.mL",
+      "µm3/mL",            "Specific Surface Area", "EC_env_ssa.um3.mL",
+      "µm2/µg/mL",         "Particles",           "EC_env_p.um2.ug.mL",
+      "µm2/µg/mL",         "Surface Area",        "EC_env_sa.um2.ug.mL",
+      "µm2/µg/mL",         "Volume",              "EC_env_v.um2.ug.mL",
+      "µm2/µg/mL",         "Mass",                "EC_env_m.um2.ug.mL",
+      "µm2/µg/mL",         "Specific Surface Area", "EC_env_ssa.um2.ug.mL",
+      #Sediment-based concentrations
+      "mg/kg sediment",            "Unaligned",             "dose.mg.kg.sediment.master",
+      "Particles/kg sediment",     "Unaligned",             "dose.particles.kg.sediment.master",
+      "µm3/kg sediment",           "Unaligned",             "dose.um3.kg.sediment.master",
+      "µm2/kg sediment",           "Unaligned",             "dose.um2.kg.sediment.master",
+      "µm2/µg/kg sediment",        "Unaligned",             "dose.um2.ug.kg.sediment.master",
+      
+      "Particles/kg sediment",     "Particles",             "EC_env_p.particles.mL",
+      "Particles/kg sediment",     "Surface Area",          "EC_env_sa.particles.mL",
+      "Particles/kg sediment",     "Volume",                "EC_env_v.particles.mL",
+      "Particles/kg sediment",     "Mass",                  "EC_env_m.particles.mL",
+      "Particles/kg sediment",     "Specific Surface Area", "EC_env_ssa.particles.mL",
+      
+      "µm2/kg sediment",           "Particles",             "EC_env_p.um2.mL",
+      "µm2/kg sediment",           "Surface Area",          "EC_env_sa.um2.mL",
+      "µm2/kg sediment",           "Volume",                "EC_env_v.um2.mL",
+      "µm2/kg sediment",           "Mass",                  "EC_env_m.um2.mL",
+      "µm2/kg sediment",           "Specific Surface Area", "EC_env_ssa.um2.mL",
+      
+      "mg/kg sediment",            "Particles",             "EC_env_p.ug.mL",
+      "mg/kg sediment",            "Surface Area",          "EC_env_sa.ug.mL",
+      "mg/kg sediment",            "Volume",                "EC_env_v.ug.mL",
+      "mg/kg sediment",            "Mass",                  "EC_env_m.ug.mL",
+      "mg/kg sediment",            "Specific Surface Area", "EC_env_ssa.ug.mL",
+      
+      "µm3/kg sediment",           "Particles",             "EC_env_p.um3.mL",
+      "µm3/kg sediment",           "Surface Area",          "EC_env_sa.um3.mL",
+      "µm3/kg sediment",           "Volume",                "EC_env_v.um3.mL",
+      "µm3/kg sediment",           "Mass",                  "EC_env_m.um3.mL",
+      "µm3/kg sediment",           "Specific Surface Area", "EC_env_ssa.um3.mL",
+      
+      "µm2/µg/kg sediment",        "Particles",             "EC_env_p.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Surface Area",          "EC_env_sa.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Volume",                "EC_env_v.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Mass",                  "EC_env_m.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Specific Surface Area", "EC_env_ssa.um2.ug.mL"
+    )
+    
+    # Join to get correct column name
+    selected_col <- dose_lookup %>%
+      filter(dose_check == !!dose_check, ERM_check == !!ERM_check) %>%
+      pull(dose_col)
+    
+    # Apply filtering if needed
+    if (ERM_check == "Unaligned") {
+      if (Rep_Con_rad %in% c("reported", "converted")) {
+        aoc_z <- aoc_z %>%
+          filter(dose.particles.mL.master.converted.reported|dose.particles.kg.sediment.master.converted.reported == Rep_Con_rad)
+      }
+      aoc_z <- aoc_z %>%
+        mutate(dose_new = .data[[selected_col]])
+    } else {
+      if (Rep_Con_rad %in% c("reported", "converted")) {
+        aoc_z <- aoc_z %>%
+          filter(dose.particles.mL.master.converted.reported|dose.particles.kg.sediment.master.converted.reported == Rep_Con_rad)
+      }
+      aoc_z <- aoc_z %>%
+        mutate(dose_new = .data[[selected_col]])
+    }
+    
+    #left-hand table of all data considered
+    aoc_z %>% # take original dataset
+      mutate(AF.total = case_when((AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "Yes") ~ (af.time * af.noec), #composite assessment factors
+                                  (AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "No") ~ (af.time),
+                                  (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (af.noec),
+                                  (AF.time_r_ssd == "No" & AF.noec_r_ssd == "No") ~ 1)) %>% 
+      mutate(dose_new = dose_new / AF.total) %>% 
+      # mutate(dose_new = case_when((AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "Yes") ~ (dose_new / (af.time * af.noec)), #composite assessment factors
+      #                             (AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "No") ~ (dose_new / af.time),
+      #                             (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (dose_new / af.noec),
+      #                             (AF.time_r_ssd == "No" & AF.noec_r_ssd == "No") ~ dose_new)) %>% # adjust for assessment factors based on user input
+      dplyr::filter(exp_type_f %in% exp_type_c_ssd) %>%
+      dplyr::filter(env_f %in% env_c_ssd) %>% #filter by environment inputs
+      dplyr::filter(Group %in% Group_c_ssd) %>% # filter by organism inputs
+      dplyr::filter(Species %in% Species_c_ssd) %>% #filter by species inputs
+      dplyr::filter(bio_f %in% bio_c_ssd) %>% #filter by species inputs
+      dplyr::filter(size_f %in% size_c_ssd) %>% #filter by size inputs
+      dplyr::filter(lvl1_f %in% lvl1_c_ssd) %>% # filter by broad inputs
+      dplyr::filter(lvl2_f %in% lvl2_c_ssd) %>% # filter by level inputs
+      dplyr::filter(poly_f %in% poly_c_ssd) %>% #filter by polymer inputs
+      dplyr::filter(shape_f %in% shape_c_ssd) %>% #filter by shape inputs
+      dplyr::filter(bio_f %in% bio_c_ssd) %>% #filter by bio org inputs
+      dplyr::filter(tier_zero_tech_f %in% tech_tier_zero_c_ssd) %>% #technical quality
+      dplyr::filter(tier_zero_risk_f %in% risk_tier_zero_c_ssd) %>%  #risk assessment quality
+      dplyr::filter(dose_new > 0) %>% #clean out no dose data
+      dplyr::filter(effect.metric %in% effect_metric_rad) %>%  #filter for effect metric
+      dplyr::filter(acute.chronic_f %in% acute.chronic.c_ssd) %>%  #acute chronic filter
+      dplyr::filter(risk.13 != 0) %>%  #Drop studies that received a score of 0 for endpoints criteria (this also drops studies that have not yet been scored) - KEEP THIS AFTER THE RED CRITERIA FILTERS  
+      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
+                              ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M),  #if ingestion-limited, don't use data outside upper default size range
+                              ingestion.translocation.switch == "none" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set)   #if none selected, don't filter
+      )) %>%  #if ingestion-limited, don't use data outside upper default size range
+      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  translocatable != "not translocatable", #if tissue-trans limited, don't use data with non-translocatable particles
+                              ingestion.translocation.switch == "ingestion" ~  ingestible != "not ingestible",#if ingestion-limited, don't use data outside upper default size range)
+                              ingestion.translocation.switch == "none" ~ ingestible %in% c("ingestible", "not ingestible") # don't filter if no bioavail filter selected
+      ))  %>%  
+      group_by(Species) %>% 
+      drop_na(dose_new)# %>% 
+      # make sure we're not using a multiplicity of doses that are identical
+    #  distinct(Species, doi, dose.particles.mL.master, poly_f, shape_f, .keep_all = T)  ## not applying this, as was not included in original framework
+  })
+    
+    aoc_z_L <- eventReactive(list(input$SSDgo),{
+      aoc_ssd_filtered() %>% 
+            summarise(MinConcTested = min(dose_new), 
+                      MaxConcTested = max(dose_new),
+                      CountStudies = n_distinct(doi),
+                      CountTotal = n_distinct(dose.particles.mL.master))# %>%   #summary data for whole database
+     # mutate_if(is.numeric, ~ signif(., 6))
+        })
+  
+  # Create new effect dataset based on widget filtering and adjusted to reflect the presence of the "update" button.
+  aoc_z_R <- eventReactive(list(input$SSDgo),{
+    # eventReactive explicitly delays activity until you press the button
+    # here we'll use the inputs to create a new dataset that will be fed into the renderPlot calls below
+    exp_type_c_ssd <- input$exp_type_check_ssd
+    env_c_ssd <- input$env_check_ssd #assign environments
+    Group_c_ssd <- input$Group_check_ssd # assign organism input values to "org_c"
+    bio_c_ssd <- input$bio_check_ssd #level of biological organization
+    Species_c_ssd <- input$Species_check_ssd #assign species input
+    size_c_ssd <- input$size_check_ssd #assign sizes input
+    lvl1_c_ssd <- input$lvl1_check_ssd #assign general endpoints
+    lvl2_c_ssd <- input$lvl2_check_ssd #assign specific endpoints
+    poly_c_ssd <- input$poly_check_ssd #assign polymers
+    shape_c_ssd <- input$shape_check_ssd #assign shapes
+    effect_metric_rad <- input$effect.metric_rad_ssd #effect metric filtering
+    AF.time_r_ssd <- input$AF.time_rad_ssd #yes/no apply assessment factor for acute -> chronic
+    AF.noec_r_ssd <- input$AF.noec_rad_ssd #yes/no apply assessment factor for LOEC/ECXX -> NOEC
+    Rep_Con_rad <- input$Reported_Converted_rad #use nominal or calculated exposure concentrations. Options are TRUE (calculated) or FALSE (reported)
+    ERM_check <- input$ERM_check_ssd #ERM
+    dose_check <- input$dose_check_ssd #rename variable
+    acute.chronic.c_ssd <- input$acute.chronic_check_ssd #acute chronic checkbox
+    conc.select.r <- input$conc.select.rad #concentration selector ("minimum", "lower 95% CI", "1st Quartile", "median", "mean", "3rd Quartile", "upper 95% CI", "maximum")
+    tech_tier_zero_c_ssd<-input$tech_tier_zero_check_ssd #assign values to "design_tier_zero_c"
+    risk_tier_zero_c_ssd<-input$risk_tier_zero_check_ssd #assign values to "risk_tier_zero_c"
+    
+    # ERM parametrization ##
+    # Define params for alignments 
+    x2D_set = as.numeric(input$upper_length_ssd) #upper size range (default)
+    x1D_set = input$lower_length_ssd #lower size range (default)
+    x1M_set = input$lower_length_ssd #lower size range for ingestible plastic (user defined)
+    upper.tissue.trans.size.um <- as.numeric(input$upper.tissue.trans.size.um_ssd) #user-defined upper value for tissue trans (numeric)
+    ingestion.translocation.switch <- input$ingestion.translocation.switch_ssd #user-defined: inputs are "ingestion" or "translocation"
+    
+    # define parameters for power law coefficients
+    alpha.input = input$alpha_ssd #length power law exponent
+    a.sa.input = input$a.sa_ssd #1.5 #marine surface area power law
+    a.v.input = input$a.v_ssd#1.48 #a_V for marine surface water volume
+    a.m.input = input$a.m_ssd#1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa.input = input$a.ssa_ssd #1.98 # A_SSA for marine surface water
+    
+    #define additional parameters for calculations based on averages in the environment
+    R.ave.input = input$R.ave_ssd #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave.input = input$p.ave_ssd#1.10 #average density in marine surface water
+    H_W_ratio.input = input$H_W_ratio_ssd # 0.67 #Kooi et al. (2021) default
+    
+    # calculate ERM for each species
+    aoc_z <- aoc_z %>%
+      # Add user input columns into the dataframe (if left as global vars, will fail)
+      mutate(x2D_set = x2D_set,
+             x1D_set = x1D_set,
+             x1M_set = x1M_set,
+             upper.tissue.trans.size.um = upper.tissue.trans.size.um,
+             ingestion.translocation.switch = ingestion.translocation.switch,
+             alpha = alpha.input,
+             a.sa = a.sa.input,
+             a.v = a.v.input,
+             a.m = a.m.input,
+             a.ssa = a.ssa.input,
+             R.ave = R.ave.input,
+             p.ave = p.ave.input,
+             H_W_ratio = H_W_ratio.input
+      ) %>% 
+      
+      ### BIOACCESSIBILITY ###
+      # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
+      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
+                                    max.size.ingest.um < x2D_set ~ max.size.ingest.um,
+                                    max.size.ingest.um > x2D_set ~ x2D_set)) %>%  #set to default as upper limit or max size ingest, whichever is smaller
+      # define upper size length for Translocation 
+      mutate(x2M_trans = case_when(is.na(max.size.ingest.um) ~ upper.tissue.trans.size.um, 
+                                   max.size.ingest.um  < upper.tissue.trans.size.um ~  max.size.ingest.um,
+                                   max.size.ingest.um  > upper.tissue.trans.size.um ~ upper.tissue.trans.size.um)) %>% 
+      #define which bioaccessibility limit to use for calculations based on user input
+      mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
+      mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
+                             ingestion.translocation == "translocation" ~ x2M_trans,
+                             ingestion.translocation == "none" ~ x2D_set)) %>% 
+      # CF Bio #
+      #calculate CF_bio for all conversions
+      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
+      ###############################################################################
+    ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
+    ######################################################################################
+      ## assign whether polydisperse data are partially, fully, or not bioavailable
+      mutate(ingestible_poly = case_when(
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (all)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (some)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions > x2M_ingest ~ "not ingestible"),
+        translocatable_poly = case_when(
+          polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (all)",
+          polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
+          polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
+      ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
+      # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
+      ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
+    mutate(size.length.max.um.used.for.conversions = case_when(
+      is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
+      !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000)) %>% 
+    # correct for partially translocatable particles
+    mutate(CF_bioavailable_trans = case_when(translocatable_poly == "translocatable (some)" ~ CFfnx(a = alpha,
+                                                                                                    x1D = size.length.min.um.used.for.conversions,
+                                                                                                    x2D = x2M_trans,
+                                                                                                    x1M = size.length.min.um.used.for.conversions,
+                                                                                                    x2M = size.length.max.um.used.for.conversions),
+                                             T ~ 1)) %>% # all other cases retain original dose
+      # now correct the dosage (will be fraction )
+      mutate(dose.particles.mL.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.mL.master,
+                                                 T ~ dose.particles.mL.master),
+             dose.particles.kg.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.kg.sediment.master,
+                                                 T ~ dose.particles.kg.sediment.master)) %>% 
+      # correct for partially ingestible particles
+      mutate(CF_bioavailable_ingest = case_when(ingestible_poly == "ingestible (some)" ~ CFfnx(a = alpha,
+                                                                                               x1D = size.length.min.um.used.for.conversions,
+                                                                                               x2D = x2M_ingest,
+                                                                                               x1M = size.length.min.um.used.for.conversions,
+                                                                                               x2M = size.length.max.um.used.for.conversions),
+                                                T ~ 1)) %>% 
+      mutate(dose.particles.mL.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.mL.master,
+                                                  T ~ dose.particles.mL.master),
+             dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
+                                                  T ~ dose.particles.kg.sediment.master)
+             ) %>% 
+      # correct for particles when no bioavailability filter selected by user
+      mutate(dose.particles.mL.no_filter = CF_bio * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF_bio * dose.particles.kg.sediment.master) %>% 
+          ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    ## calculate size parameters using compartment characteristics
+    ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
+    ##### ----- LENGTH ------ ###
+    # no need to correct monodisperse. Min for polydispserse remains same #
+    ## polydisperse ##
+    mutate(size.length.max.um.trans = case_when(translocatable_poly == "translocatable (some)" ~ x2M_trans,
+                                                T ~ size.length.max.um.used.for.conversions),
+           size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
+                                                 T ~ size.length.max.um.used.for.conversions)) %>% 
+      ##### ----- WIDTH ------ ###
+      ## Monodisperse ##
+      mutate(size.width.um.used.for.conversions = case_when(
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        is.na(size.width.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # W = L for spheres
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
+        T ~ size.width.um.used.for.conversions # if available, use as-is
+      )) %>% 
+      ### Polydisperse ###
+      # Min is always same #
+      # calculate size parameters using compartment characteristics
+      mutate(size.width.min.um.used.for.conversions = case_when(
+        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
+        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
+        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+      ### Max depends on ingest/trans limits ###
+      # TRANS #
+      mutate(size.width.max.um.trans = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # INGEST #
+      mutate(size.width.max.um.ingest = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>%
+      # No bioavailability #
+      mutate(size.width.max.um.used.for.conversions = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      ###### ------ HEIGHT ----- ##### 
+    ## Monodisperse ##
+    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+    mutate(size.height.um.used.for.conversions = case_when(
+      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+    )) %>% 
+      ### Polydisperse ##
+      ## Min is always same ##
+      mutate(size.height.min.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%  # environment AND average height to width ratio (kooi et al 2021)
+      # trans #
+      mutate(size.height.max.um.trans = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # Ingest # 
+      mutate(size.height.max.um.ingest = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # No bioavailability #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      ############ ------ Volume ------ ##########
+    ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    #### Monodisperse ##
+    # calculate volume for monodisperse particles #
+    mutate(particle.volume.um3 = volumefnx(R = R.ave,
+                                           length = size.length.um.used.for.conversions, 
+                                           width = size.width.um.used.for.conversions,
+                                           height = size.height.um.used.for.conversions
+    )) %>% 
+      #### Polydisperse ##
+      mutate(particle.volume.um3.min = volumefnx(R = R.ave, 
+                                                 length = size.length.min.um.used.for.conversions,
+                                                 width = size.width.min.um.used.for.conversions, 
+                                                 height = size.height.min.um.used.for.conversions)) %>% 
+      ### Trans ##
+      # calculate min and max volume when polydisperse particles are used (being sure to use ingestion-restricted sizes)
+      # calculate max volume when polydisperse particles are used (translocation-limited)
+      mutate(particle.volume.um3.max.trans = volumefnx(R = R.ave,
+                                                       length = size.length.max.um.trans,
+                                                       width = size.width.max.um.trans, 
+                                                       height = size.height.max.um.trans)) %>%
+      ### Ingest  ##
+      # calculate max volume when polydisperse particles are used (ingestlocation-limited)
+      mutate(particle.volume.um3.max.ingest = volumefnx(R = R.ave,
+                                                        length = size.length.max.um.ingest,
+                                                        width = size.width.max.um.ingest, 
+                                                        height = size.height.max.um.ingest)) %>% 
+      ### No Filter ###
+      # calculate max volume when polydisperse particles are used (no bioavility fildter)
+      mutate(particle.volume.um3.max.none = volumefnx(R = R.ave,
+                                                      length = size.length.max.um.used.for.conversions,
+                                                      width = size.width.max.um.used.for.conversions, 
+                                                      height = size.height.max.um.used.for.conversions)) %>% 
+      ############ ------ Surface Area ------ ##########
+    # calculate surface are for monodisperse particles
+    mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
+                                             width = size.width.um.used.for.conversions,
+                                             height = size.height.um.used.for.conversions,
+                                             R = R.ave,
+                                             H_W_ratio = H_W_ratio)) %>% 
+      ##### Polydisperse ###
+      # calculate min/max SA for polydisperse mixtures (being sure to use translocation/ingestion-restricted polydisperse upper sizes)
+      mutate(particle.surface.area.um2.min = SAfnx(length = size.length.min.um.used.for.conversions,
+                                                   width = size.width.min.um.used.for.conversions,
+                                                   height = size.height.min.um.used.for.conversions,
+                                                   R = R.ave,
+                                                   H_W_ratio = H_W_ratio)) %>% 
+      ### Trans ## 
+      mutate(particle.surface.area.um2.max.trans = SAfnx(R = R.ave,
+                                                         H_W_ratio = H_W_ratio,
+                                                         length = size.length.max.um.trans,
+                                                         width = size.width.max.um.trans, 
+                                                         height = size.height.max.um.trans)) %>% 
+      ### Ingest ### 
+      mutate(particle.surface.area.um2.max.ingest = SAfnx(R = R.ave,
+                                                          H_W_ratio = H_W_ratio,
+                                                              length = size.length.max.um.ingest,
+                                                              width = size.width.max.um.ingest, 
+                                                              height = size.height.max.um.ingest)) %>% 
+      ### No bioavailbility filter ### 
+      mutate(particle.surface.area.um2.max.none = SAfnx(R = R.ave,
+                                                            H_W_ratio = H_W_ratio,
+                                                            length = size.length.max.um.used.for.conversions,
+                                                            width = size.width.max.um.used.for.conversions, 
+                                                            height = size.height.max.um.used.for.conversions)) %>% 
+      #calculate mass for monodisperse particles  
+      mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3    
+      #calculate minimum and maximum mass or polydisperse particles
+      mutate(mass.per.particle.mg.min = massfnx(v = particle.volume.um3.min, p = density.g.cm3) * 1e-3) %>% #equation uses g/cm3
+      # Trans
+      mutate(mass.per.particle.mg.max.trans = massfnx(v = particle.volume.um3.max.trans, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # Ingest
+      mutate(mass.per.particle.mg.max.ingest = massfnx(v = particle.volume.um3.max.ingest, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # none
+      mutate(mass.per.particle.mg.max.none = massfnx(v = particle.volume.um3.max.none, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      
+  ###### Alignments #2 #####
+      # Particle ERM #
+    # calculate effect threshold for particles (depending on selection of ingestion/translocation switch)
+    mutate(
+      EC_mono_p.particles.mL = case_when(
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "ingestion" ~ dose.particles.mL.ingest,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "ingestion" ~ dose.particles.kg.ingest,
+        
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "translocation" ~ dose.particles.mL.trans,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "translocation" ~ dose.particles.kg.trans,
+        
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "none" ~ dose.particles.mL.no_filter,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "none" ~ dose.particles.kg.no_filter
+      )
+    ) %>% 
+       #  ensure algae never considered for food dilution
+      mutate(EC_mono_p.particles.mL = case_when(
+        ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        T ~ EC_mono_p.particles.mL)) %>%
+      mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
+      mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
+      # polydisperse effect threshold for particles
+      mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
+      ## Calculate environmentally relevant effect threshold for particles
+      mutate(EC_env_p.particles.mL = EC_poly_p.particles.mL * CF_bio) %>%  #aligned particle effect concentraiton (1-5000 um)
+      
+    # Surface Area ERM #
+    ##--- environmental calculations ---###
+    #calculate lower ingestible surface area
+    mutate(x_LL_sa = SAfnx(length = x1D_set, 
+                           width = x1D_set, 
+                           height = x1D_set)) %>% #length-limited
+      #calculate upper ingestible surface area
+      mutate(x_UL_sa = SAfnx(length = x2M, #LENGTH-limited (less conservative assumption)
+                             width = x2M, #length-limited
+                             height = x2M)) %>%   #length-limited
+      #calculate mu_x_poly (env) for surface area
+      mutate(mu.sa.poly = mux_polyfnx(a.sa, x_UL_sa, x_LL_sa)) %>% 
+      
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.sa.mono = case_when(
+        polydispersity == "monodisperse" ~ particle.surface.area.um2, # use reported surface area in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                                x_LL = particle.surface.area.um2.min,
+                                                                                                                x_UL = particle.surface.area.um2.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                                x_LL = particle.surface.area.um2.min,
+                                                                                                                x_UL = particle.surface.area.um2.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                   x_LL = particle.surface.area.um2.min,
+                                                                                                   x_UL = particle.surface.area.um2.max.none)
+        )) %>% 
+      #calculate polydisperse effect concentration for surface area (particles/mL)
+      mutate(EC_poly_sa.particles.mL = (EC_mono_p.particles.mL * mu.sa.mono)/mu.sa.poly) %>%  
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_sa.particles.mL = EC_poly_sa.particles.mL * CF_bio) %>% 
+      
+    # Volume ERM #
+    ##--- environmental calculations ---###
+    #calculate lower ingestible volume 
+      mutate(x_LL_v = volumefnx(length = x1D_set,
+                                width = x1D_set,
+                                height = x1D_set
+      )) %>% 
+      #calculate maximum ingestible volume 
+      mutate(x_UL_v = volumefnx(length = x2M, #length-limited
+                                width = x2M,
+                                height = x2M
+      )) %>% #length-limited
+      # calculate mu.v.poly
+      mutate(mu.v.poly = mux_polyfnx(a.v, x_UL_v, x_LL_v)) %>% 
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.v.mono = case_when(
+        polydispersity == "monodisperse" ~ particle.volume.um3, # use reported volume in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                            x_LL = particle.volume.um3.min,
+                                                                                                            x_UL = particle.volume.um3.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                        x_LL = particle.volume.um3.min,
+                                                                                                        x_UL = particle.volume.um3.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                   x_LL = particle.volume.um3.min,
+                                                                                                   x_UL = particle.volume.um3.max.none)
+        )) %>% 
+      
+      #calculate polydisperse effect concentration for volume (particles/mL)
+      mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+      # Mass ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible mass
+      mutate(x_LL_m = massfnx(v = x_LL_v, p = p.ave)) %>% 
+      #calculate upper ingestible mass
+      mutate(x_UL_m = massfnx(v = x_UL_v, p = p.ave)) %>% #average density
+      # calculate mu.m.poly
+      mutate(mu.m.poly = mux_polyfnx(a.m, x_UL_m, x_LL_m)) %>% 
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.m.mono = case_when(
+        polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.m, 
+                                                                                                                x_LL = mass.per.particle.mg.min,
+                                                                                                                x_UL = mass.per.particle.mg.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.m, 
+                                                                                                            x_LL = mass.per.particle.mg.min,
+                                                                                                            x_UL = mass.per.particle.mg.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.none)
+        )) %>% 
+      #calculate polydisperse effect concentration for volume (particles/mL)
+      mutate(EC_poly_m.particles.mL = (EC_env_p.particles.mL * mu.m.mono)/mu.m.poly) %>%
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_m.particles.mL = EC_poly_m.particles.mL * CF_bio) %>% 
+      
+      # Specific Surface Area ERM #
+    mutate(mu.ssa.mono = mu.sa.mono/mu.m.mono) %>% #define mu_x_mono for alignment to ERM (um^2/ug)
+      #calculate lower ingestible 1/SSA
+      mutate(x_LL_ssa = SSA.inversefnx(sa = x_LL_sa, #surface area
+                                       m = x_LL_m) #mass
+      ) %>% 
+      #calculate upper ingestible SSA  (um^2/ug)
+      mutate(x_UL_ssa = SSA.inversefnx(sa = x_UL_sa, #surface area
+                                       m = x_UL_m) #mass
+      ) %>% 
+      #calculate mu_x_poly for specific surface area
+      #note that mu were calcaulted for polydisperse particles before, so not special case needed here
+      mutate(mu.ssa.inverse.poly = mux_polyfnx(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
+      #calculate polydisperse effect concentration for specific surface area (particles/mL)
+      mutate(mu.ssa.poly = 1 / mu.ssa.inverse.poly) %>%  #calculate mu_SSA from inverse
+      mutate(EC_poly_ssa.particles.mL = (EC_env_p.particles.mL * mu.ssa.mono)/mu.ssa.poly) %>% 
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_ssa.particles.mL = EC_poly_ssa.particles.mL * CF_bio) %>% 
+      
+      ### Convert to Metrics other than particles/mL ###
+      ## convert all environmentally realistic thresholds to surface area ##
+      # particle count to surface area #
+      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to surface area #
+      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to surface area #
+      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to surface area #
+      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to surface area #
+      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to volume ##
+      # particle count to volume #
+      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to volume #
+      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to volume #
+      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to volume #
+      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to volume #
+      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to mass ##
+      # particle count to mass #
+      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to mass #
+      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to mass #
+      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to mass #
+      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to mass #
+      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to specific surface area ##
+      # particle count to specific surface area #
+      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to specific surface area #
+      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to specific surface area #
+      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to specific surface area #
+      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to specific surface area #
+      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set))
+      
+    #Alignment Options Table
+    dose_lookup <- tribble(
+      ~dose_check,         ~ERM_check,            ~dose_col,
+      #Water-based concentrations
+      "µg/mL",             "Unaligned",           "dose.mg.L.master",
+      "Particles/mL",      "Unaligned",           "dose.particles.mL.master",
+      "µm3/mL",            "Unaligned",           "dose.um3.mL.master",
+      "µm2/mL",            "Unaligned",           "dose.um2.mL.master",
+      "µm2/µg/mL",         "Unaligned",           "dose.um2.ug.mL.master",
+      "Particles/mL",      "Particles",           "EC_env_p.particles.mL",
+      "Particles/mL",      "Surface Area",        "EC_env_sa.particles.mL",
+      "Particles/mL",      "Volume",              "EC_env_v.particles.mL",
+      "Particles/mL",      "Mass",                "EC_env_m.particles.mL",
+      "Particles/mL",      "Specific Surface Area", "EC_env_ssa.particles.mL",
+      "µm2/mL",            "Particles",           "EC_env_p.um2.mL",
+      "µm2/mL",            "Surface Area",        "EC_env_sa.um2.mL",
+      "µm2/mL",            "Volume",              "EC_env_v.um2.mL",
+      "µm2/mL",            "Mass",                "EC_env_m.um2.mL",
+      "µm2/mL",            "Specific Surface Area", "EC_env_ssa.um2.mL",
+      "µg/mL",             "Particles",           "EC_env_p.ug.mL",
+      "µg/mL",             "Surface Area",        "EC_env_sa.ug.mL",
+      "µg/mL",             "Volume",              "EC_env_v.ug.mL",
+      "µg/mL",             "Mass",                "EC_env_m.ug.mL",
+      "µg/mL",             "Specific Surface Area", "EC_env_ssa.ug.mL",
+      "µm3/mL",            "Particles",           "EC_env_p.um3.mL",
+      "µm3/mL",            "Surface Area",        "EC_env_sa.um3.mL",
+      "µm3/mL",            "Volume",              "EC_env_v.um3.mL",
+      "µm3/mL",            "Mass",                "EC_env_m.um3.mL",
+      "µm3/mL",            "Specific Surface Area", "EC_env_ssa.um3.mL",
+      "µm2/µg/mL",         "Particles",           "EC_env_p.um2.ug.mL",
+      "µm2/µg/mL",         "Surface Area",        "EC_env_sa.um2.ug.mL",
+      "µm2/µg/mL",         "Volume",              "EC_env_v.um2.ug.mL",
+      "µm2/µg/mL",         "Mass",                "EC_env_m.um2.ug.mL",
+      "µm2/µg/mL",         "Specific Surface Area", "EC_env_ssa.um2.ug.mL",
+      #Sediment-based concentrations
+      "mg/kg sediment",            "Unaligned",             "dose.mg.kg.sediment.master",
+      "Particles/kg sediment",     "Unaligned",             "dose.particles.kg.sediment.master",
+      "µm3/kg sediment",           "Unaligned",             "dose.um3.kg.sediment.master",
+      "µm2/kg sediment",           "Unaligned",             "dose.um2.kg.sediment.master",
+      "µm2/µg/kg sediment",        "Unaligned",             "dose.um2.ug.kg.sediment.master",
+      
+      "Particles/kg sediment",     "Particles",             "EC_env_p.particles.mL",
+      "Particles/kg sediment",     "Surface Area",          "EC_env_sa.particles.mL",
+      "Particles/kg sediment",     "Volume",                "EC_env_v.particles.mL",
+      "Particles/kg sediment",     "Mass",                  "EC_env_m.particles.mL",
+      "Particles/kg sediment",     "Specific Surface Area", "EC_env_ssa.particles.mL",
+      
+      "µm2/kg sediment",           "Particles",             "EC_env_p.um2.mL",
+      "µm2/kg sediment",           "Surface Area",          "EC_env_sa.um2.mL",
+      "µm2/kg sediment",           "Volume",                "EC_env_v.um2.mL",
+      "µm2/kg sediment",           "Mass",                  "EC_env_m.um2.mL",
+      "µm2/kg sediment",           "Specific Surface Area", "EC_env_ssa.um2.mL",
+      
+      "mg/kg sediment",            "Particles",             "EC_env_p.ug.mL",
+      "mg/kg sediment",            "Surface Area",          "EC_env_sa.ug.mL",
+      "mg/kg sediment",            "Volume",                "EC_env_v.ug.mL",
+      "mg/kg sediment",            "Mass",                  "EC_env_m.ug.mL",
+      "mg/kg sediment",            "Specific Surface Area", "EC_env_ssa.ug.mL",
+      
+      "µm3/kg sediment",           "Particles",             "EC_env_p.um3.mL",
+      "µm3/kg sediment",           "Surface Area",          "EC_env_sa.um3.mL",
+      "µm3/kg sediment",           "Volume",                "EC_env_v.um3.mL",
+      "µm3/kg sediment",           "Mass",                  "EC_env_m.um3.mL",
+      "µm3/kg sediment",           "Specific Surface Area", "EC_env_ssa.um3.mL",
+      
+      "µm2/µg/kg sediment",        "Particles",             "EC_env_p.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Surface Area",          "EC_env_sa.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Volume",                "EC_env_v.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Mass",                  "EC_env_m.um2.ug.mL",
+      "µm2/µg/kg sediment",        "Specific Surface Area", "EC_env_ssa.um2.ug.mL"
+    )
+    
+    # Join to get correct column name
+    selected_col <- dose_lookup %>%
+      filter(dose_check == !!dose_check, ERM_check == !!ERM_check) %>%
+      pull(dose_col)
+    
+    # Apply filtering if needed
+    if (ERM_check == "Unaligned") {
+      if (Rep_Con_rad %in% c("reported", "converted")) {
+        aoc_z <- aoc_z %>%
+          filter(dose.particles.mL.master.converted.reported|dose.particles.kg.sediment.master.converted.reported == Rep_Con_rad)
+      }
+      aoc_z <- aoc_z %>%
+        mutate(dose_new = .data[[selected_col]])
+    } else {
+      if (Rep_Con_rad %in% c("reported", "converted")) {
+        aoc_z <- aoc_z %>%
+          filter(dose.particles.mL.master.converted.reported|dose.particles.kg.sediment.master.converted.reported == Rep_Con_rad)
+      }
+      aoc_z <- aoc_z %>%
+        mutate(dose_new = .data[[selected_col]])
+    }
+    
+    #right-hand table of just effect data
+    aoc_ssd <- aoc_z %>% 
+      mutate(AF.total = case_when((AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "Yes") ~ (af.time * af.noec), #composite assessment factors
+                                  (AF.time_r_ssd == "Yes" & AF.noec_r_ssd == "No") ~ (af.time),
+                                  (AF.time_r_ssd == "No" & AF.noec_r_ssd == "Yes") ~ (af.noec),
+                                  (AF.time_r_ssd == "No" & AF.noec_r_ssd == "No") ~ 1)) %>% 
+      mutate(dose_new = dose_new / AF.total) %>% 
+      dplyr::filter(exp_type_f %in% exp_type_c_ssd) %>%
+      dplyr::filter(env_f %in% env_c_ssd) %>% #filter by environment inputs
+      dplyr::filter(Group %in% Group_c_ssd) %>% # filter by organism inputs
+      dplyr::filter(bio_f %in% bio_c_ssd) %>% #filter by species inputs
+      dplyr::filter(Species %in% Species_c_ssd) %>% #filter by species inputs
+      dplyr::filter(size_f %in% size_c_ssd) %>% #filter by size inputs
+      dplyr::filter(lvl1_f %in% lvl1_c_ssd) %>% # filter by generic endpoints inputs
+      dplyr::filter(lvl2_f %in% lvl2_c_ssd) %>% # filter by specific endpoints inputs
+      dplyr::filter(poly_f %in% poly_c_ssd) %>% #filter by polymer inputs
+      dplyr::filter(shape_f %in% shape_c_ssd) %>% #filter by shape inputs
+      dplyr::filter(bio_f %in% bio_c_ssd) %>% #filter by bio org inputs
+      dplyr::filter(effect.metric %in% effect_metric_rad) %>%  #filter for effect metric
+      dplyr::filter(acute.chronic_f %in% acute.chronic.c_ssd) %>%  #acute chronic filter
+      dplyr::filter(tier_zero_tech_f %in% tech_tier_zero_c_ssd) %>% #technical quality
+      dplyr::filter(tier_zero_risk_f %in% risk_tier_zero_c_ssd) %>%  #risk assessment quality
+      dplyr::filter(risk.13 != 0) %>%  #Drop studies that received a score of 0 for endpoints criteria (this also drops studies that have not yet been scored) - KEEP THIS AFTER THE RED CRITERIA FILTERS  
+      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  between(size.length.um.used.for.conversions, x1D_set, x2M), #if tissue-trans limited, don't use data with non-translocatable particles
+                              ingestion.translocation.switch == "ingestion" ~  between(size.length.um.used.for.conversions, x1D_set, x2M),  #if ingestion-limited, don't use data outside upper default size range
+                              ingestion.translocation.switch == "none" ~  between(size.length.um.used.for.conversions, x1D_set, x2D_set)   #if none selected, don't filter
+                              )) %>%  #if ingestion-limited, don't use data outside upper default size range
+      dplyr::filter(case_when(ingestion.translocation.switch == "translocation" ~  translocatable != "not translocatable", #if tissue-trans limited, don't use data with non-translocatable particles
+                              ingestion.translocation.switch == "ingestion" ~  ingestible != "not ingestible",#if ingestion-limited, don't use data outside upper default size range)
+                              ingestion.translocation.switch == "none" ~ ingestible %in% c("ingestible", "not ingestible") # don't filter if no bioavail filter selected
+                              ))  %>%  
+       drop_na(dose_new) %>%  #must drop NAs or else nothing will work
+       filter(dose_new > 0) %>% 
+      # make sure we're not using a multiplicity of doses that are identical
+      #      distinct(Species, doi, dose.particles.mL.master, poly_f, shape_f, .keep_all = T) %>% ## not applying this, as was not included in original framework
+      group_by(Species, Group) %>%
+      summarise(geomeanEffect = exp(mean(log(dose_new))),
+                minConcEffect = min(dose_new), meanConcEffect = mean(dose_new, na.rm = T), 
+                medianConcEffect = median(dose_new, na.rm = T), SDConcEffect = sd(dose_new, na.rm = T),
+                MaxConcEffect = max(dose_new), 
+                CI95_LCL = meanConcEffect - 1.96 * sd(dose_new) / sqrt(n()),  
+                firstQuartileConcEffect = quantile(dose_new, 0.25, na.rm = TRUE),
+                CI95_UCL = meanConcEffect + 1.96 * sd(dose_new) / sqrt(n()),  
+                thirdQuartileConcEffect = quantile(dose_new, 0.75), 
+                CountEffect = n(), 
+                MinEffectType = lvl1_f[which.min(dose_new)], 
+                Minlvl2EffectType = lvl2_f[which.min(dose_new)], 
+                MinEnvironment = env_f[which.min(dose_new)], 
+                MinDoi = doi[which.min(dose_new)], 
+                MinLifeStage = life_f[which.min(dose_new)], 
+                Mininvitro.invivo = vivo_f[which.min(dose_new)])# %>%  #set concentration to minimum observed effect
+      #mutate_if(is.numeric, ~ signif(., 6))
+   
+    #dynamically change concentrations used based on user input
+    ###concentration selector ("minimum", "lower 95% CI", "1st Quartile", "median", "mean", "3rd Quartile", "upper 95% CI", "maximum")###
+    if(conc.select.r == "Geometric Mean"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = geomeanEffect)
+    }
+    if(conc.select.r == "Minimum"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = minConcEffect)
+    } 
+    if(conc.select.r == "Lower 95% CI"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = CI95_LCL)
+    }
+    if(conc.select.r == "1st Quartile"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = firstQuartileConcEffect)
+    }
+    if(conc.select.r == "Mean"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = meanConcEffect)
+    }
+    if(conc.select.r == "Median"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = medianConcEffect)
+    }
+    if(conc.select.r == "3rd Quartile"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = thirdQuartileConcEffect)
+    }
+    if(conc.select.r == "Upper 95% CI"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = CI95_UCL)
+    }
+    if(conc.select.r == "Maximum"){
+      aoc_ssd <- aoc_ssd %>% 
+        mutate(Conc = MaxConcEffect)
+    }
+    
+    #final table
+    aoc_ssd
+     })
+  
+  #Join
+  aoc_filter_ssd <- reactive({
+    req(aoc_z_L)
+    req(aoc_z_R)
+    
+    #join datasets (final)
+    aoc_z_join <- right_join(aoc_z_L(), aoc_z_R(), by = "Species") 
+    #order list
+    col_order <- c("Group", "Species", "Conc", "MinEffectType", "Minlvl2EffectType", 
+                   "MinEnvironment", "MinDoi", "minConcEffect", "CI95_LCL", "firstQuartileConcEffect",
+                   "meanConcEffect", "medianConcEffect", "thirdQuartileConcEffect", "CI95_UCL", "MaxConcEffect",
+                   "SDConcEffect", "CountEffect", "MinConcTested", "MaxConcTested", "CountStudies", "CountTotal")
+    #reorder
+    aoc_z_join_order <- aoc_z_join[, col_order]
+    
+    #'print'
+    aoc_z_join_order
+  })
+  
+  
+  #print summarize filtered data in data table
+  output$aoc_filter_ssd_table <- DT::renderDataTable(server = FALSE,{ #server= FALSE prints ALL data, not just what's shown
+    dose_check_ssd <- input$dose_check_ssd # units for ERM, different for sediment or surface water
+    req(input$SSDgo)
+    
+    datatable(aoc_filter_ssd() %>%  mutate_if(is.numeric, ~ signif(., 3)),
+              extensions = c('Buttons'),
+              style = "bootstrap",
+              options = list(
+                dom = 'Brtip',
+                buttons = list(I('colvis'), c('copy', 'csv', 'excel')),
+                scrollY = 400,
+                scrollH = TRUE,
+                sScrollX = TRUE),
+              colnames = c("Group", "Species", paste0("Most Sensitive Concentration ",  dose_check_ssd), "Min Conc. Broad Endpoint", "Min Conc. Specfic Endpoint", "Min Environment", "DOI", "Minimum Effect Concentration", "95% Lower CI Effect Concentration", "1st Quartile Effect Concentration", "Average Effect Concentration", "Median Effect Concentration", "3rd Quartile Effect Concentration", "95% Upper CI Concentration", "Maximum Observed Effect Concentration", "Std Dev Effect Concentration", "Number of doses with Effects", "Min Concentration Tested (with or without effects)", "Max Concentration Tested (with or without effects)", "Total Studies", "Total PODs"),
+              caption = "Filtered Data") %>% 
+      formatStyle(
+        "Conc",
+        backgroundColor = '#a9d6d6')
+  })
+
+  # Use newly created dataset from above to generate SSD
+ ###### Prediction ######
+  #create distribution based on newly created dataset
+  fit_dists <- reactive({
+    req(input$SSDgo) #won't run unless submit button is pressed
+    aoc_ssd <- aoc_filter_ssd() #static
+    
+    set.seed(99) #reproducibility
+    
+    fit_dists <- ssd_fit_dists(aoc_ssd, #data frame
+                  left = "Conc", #string of the column in data with the concentrations
+                  # right = left, #string of the column with the right concentration values. If different from left, then the data are considerd to be censored
+                 dists = c(#"weibull",
+                           "llogis",
+                           "lnorm",
+                           "gamma",
+                           "lgumbel"), #char vector of distribution anmes
+                 computable = FALSE, #flag specifying whether to only return fits with numerically computable standard errors
+                silent = FALSE) #flag indicating whether fits should fail silently
+    
+    fit_dists
+  }) 
+  
+  #create an autoplot of the distributions
+  output$autoplot_dists_react <- renderPlot({
+    req(input$SSDgo) #won't run unless submit button is pressed
+    
+    autoplot(fit_dists())
+  })
+  
+  #back end create goodness of fit table
+  gof <- reactive({
+    req(input$SSDgo) #won't run unless submit button is pressed
+    
+    ssd_gof(fit_dists()) %>%
+     # mutate_if(is.numeric, ~ signif(., 7)) %>%
+      arrange(delta) #orders by delta of fit
+  }) 
+  
+  #Render table for goodness of fit
+  output$table_gof_react <- DT::renderDataTable(server= FALSE,{  #prints ALL data, not just what's shown 
+    req(gof())
+    gof <- gof() %>% 
+      mutate_if(is.numeric, ~ signif(., 4))
+    
+     datatable(gof,
+              extensions = 'Buttons',
+              style = "bootstrap",
+              options = list(
+                dom = 'Brt', #buttons, processing display element, table
+                 buttons = c('copy', 'csv', 'excel')
+                 ),
+              class = "compact",
+              colnames = c("Distribution", "Anderson-Darling","Kolmogorv Smirnov", "Cramer-Von Mises", "Akaike's Information Criteria", "Akaike's Information Criteria (Corrected for sample size)", "Bayesian Information Criteria", "delta", "weight"),
+              caption = "Distributions and their according fit paramaters are displayed",
+              selection = list(c(6), target = 'column')
+              )
+  })
+  
+  #SLOW STEP: Make a dataframe (aoc_pred) of the estimated concentration (est) with standard error (se) and lower (lcl) and upper (ucl) 95% confidence limits by percent of species affected (percent). The confidence limits are estimated using parametric bootstrapping.
+    aoc_pred <- eventReactive(list(input$ssdPred),{
+      # eventReactive explicitly delays activity until you press the button
+      # here we'll use the inputs to create a new dataset that will be fed into the prediction below
+      
+    pred_c_ave_ssd <- as.logical(input$pred_ave_ssd) #assign prediction averaging choice
+    pred_c_ic_ssd <- input$pred_ic_ssd #assign prediction information criteria choice
+    nbootNum <- as.numeric(input$nbootInput) #assign  number of bootsrap samples
+    dist_c <- input$dist #assign input to selected distribution
+    fit_dists <- fit_dists()
+    
+    if(pred_c_ave_ssd == TRUE){
+    set.seed(99)
+    
+      aoc_pred <- stats::predict(fit_dists, #Predict fitdist. 
+          average = pred_c_ave_ssd, #flag tells whether or not to average models from user input
+           ic = pred_c_ic_ssd, #tells which information criteria to use - user input
+            nboot = nbootNum, #number of bootstrap samples to use to estimate SE and CL
+            ci= TRUE) #estimates confidence intervals
+    }
+    
+    else{
+      set.seed(99)
+      aoc_pred <- predict(fit_dists, #Predict fitdist. 
+                    average = pred_c_ave_ssd, #flag tells whether or not to average models from user input
+                   ic = pred_c_ic_ssd, #tells which information criteria to use - user input
+                     nboot = nbootNum, #number of bootstrap samples to use to estimate SE and CL
+                     ci= TRUE) %>%  #estimates confidence intervals
+        as.data.frame() %>% 
+        filter(dist == dist_c)
+    }
+    aoc_pred
+    
+  }) 
+ 
+###### SSD Plot ######
+#Create the plot for species sensitivity distribution
+    
+## commenting out to reduce confusion - as we're now using ggplot instead.
+# SSD_plot_react <- reactive({
+#     req(aoc_pred()) #won't start until prediction is complete
+#     pred_c_hc_ssd <- as.numeric(input$pred_hc_ssd) #assign hazard concentration from numeric input
+#     #determine if particles of mass will be used
+#     dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL
+#   
+#     aoc_ssd <- aoc_filter_ssd() %>% arrange(Conc) #static
+#     
+#     aoc_ssd$frac <- ppoints(aoc_ssd$Conc, 0.5)
+#     #convert hazard concentration to sig digits
+#     aochc <- aoc_hc()
+#     aochc$est_format <-format(aochc$est, digits = 3, scientific = TRUE)
+#     
+#     ## generate plot from prediction ##
+#   ssd_plot(
+#      aoc_ssd, #data
+#      aoc_pred(), #prediction
+#      color = "source",
+#      label = "Species",
+#      xlab = dose_check_ssd,
+#      ci = TRUE, #confidence interval plotting
+#      ribbon = TRUE,
+#      hc = pred_c_hc_ssd) + #percent hazard concentration
+#      scale_fill_viridis_d() + #make colors more differentiable 
+#      scale_colour_viridis_d() +  #make colors more differentiable 
+#      expand_limits(x = c(0.000000000001,5000)) + # to ensure the species labels fit
+#     geom_text(data = aochc, aes(x = est, y = 0, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 4) + #label for hazard conc
+#     geom_text(data = aochc, aes(x = est, y = -0.05, label = est_format), color = "red") #label for hazard conc
+#     
+#       })
+#   
+# # print the SSD plot    
+# output$SSD_plot <- renderPlot({
+#   SSD_plot_react()
+#   })
+#     
+#     
+
+
+  ###### Sub-plots #####
+  #Determine Hazard Concentration
+  
+  #Estimate hazard concentration
+  aoc_hc <- eventReactive(list(input$ssdPred),{
+    fit_dists <- fit_dists()
+    
+    #user inputs
+    pred_c_ave_ssd <- as.logical(input$pred_ave_ssd) #assign prediction averaging choice
+    pred_c_ic_ssd <- input$pred_ic_ssd #assign prediction information criteria choice
+    pred_c_hc_ssd <- as.numeric(input$pred_hc_ssd) #assign hazard concentration from numeric input
+    nbootNum <- as.numeric(input$nbootInput) #assign  number of bootsrap samples
+    dist_c <- input$dist
+  
+      if(pred_c_ave_ssd == TRUE){
+    set.seed(99)
+    aoc_hc <- ssd_hc(fit_dists, #dataset
+          percent = pred_c_hc_ssd, #numeric threshold input by user (default is 0.05)
+           nboot = nbootNum, # number of bootstrap predictions to make. 10 is minimum, 1,000 is default
+        average = pred_c_ave_ssd, #tells whether or not the average models
+          ic = pred_c_ic_ssd, #tells which information criteria to use
+           ci = TRUE) #flag to estimate confidence intervals using parametric bootstrapping
+      }
+    
+    #create hc based on user choice of distribution
+    else{
+      aoc_hc <- ssd_hc(fit_dists(), #dataset
+            percent = pred_c_hc_ssd, #numeric threshold input by user (default is 0.05)
+             nboot = nbootNum, # number of bootstrap predictions to make. 10 is minimum, 1,000 is default
+         average = pred_c_ave_ssd, #tells whether or not the average models
+            ic = pred_c_ic_ssd, #tells which information criteria to use
+             ci = TRUE) %>%  #flag to estimate confidence intervals using parametric bootstrapping
+        as.data.frame() %>% 
+        filter(dist == dist_c)
+    }
+    aoc_hc
+  })
+  
+###### #Plot SSD data with ggplot#####
+   ssd_ggplot <- reactive({
+     
+     req(input$ssdPred) #won't start until button is pressed for prediction
+     
+     aoc_pred <- aoc_pred()
+     
+     #Theme type
+     theme.type<-switch(input$theme.type,
+                       "light" 	= theme_minimal(base_size = 15),
+                       "dark" = dark_theme_minimal(base_size = 15)) 
+     #color selection
+     fill.type <- switch(input$color.type,
+                         "viridis" = scale_fill_viridis(discrete = TRUE),
+                         "brewer" =  scale_fill_brewer(palette = "Paired"),
+                         "tron" = scale_fill_tron(),
+                         "locusZoom" = scale_fill_locuszoom(),
+                         "d3" = scale_fill_d3(),
+                         "Nature" = scale_fill_npg(),
+                         "JAMA" = scale_fill_jama())
+     #color selection
+     color.type <- switch(input$color.type,
+                         "viridis" = scale_color_viridis(discrete = TRUE),
+                         "brewer" =  scale_color_brewer(palette = "Paired"),
+                         "tron" = scale_color_tron(),
+                         "locusZoom" = scale_color_locuszoom(),
+                         "d3" = scale_color_d3(),
+                         "Nature" = scale_color_npg(),
+                         "JAMA" = scale_color_jama())
+
+     
+     dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL ("Particles/mL" is default)
+     ERM_check_ssd <-  input$ERM_check_ssd# "Unaligned" is default
+     lower_length_ssd <- input$lower_length_ssd #1 is default
+     upper_length_ssd <- input$upper_length_ssd #50000 is default
+     aoc_ssd <- aoc_filter_ssd() %>% arrange(Conc) #static
+    
+     #calcualte fraction
+    aoc_ssd$frac <- ppoints(aoc_ssd$Conc, 0.5)
+    
+    #convert hazard concentration to sig digits
+    aoc_hc <- aoc_hc()
+    aoc_hc$est_format <-format(aoc_hc$est, digits = 3, scientific = TRUE)
+    
+    #build ggplot
+    ssd_ggplot <- ggplot(aoc_pred,aes_string(x = "est")) +
+      geom_xribbon(aes_string(xmin = "lcl", xmax = "ucl", y = "percent/100"), alpha = 0.2, color = "grey") +
+      geom_line(aes_string(y = "percent/100"), color = "gray") +
+      geom_point(data = aoc_ssd,aes(x = Conc, y =frac, color = Group)) + 
+      #geom_text(data = aoc_ssd, aes(x = Conc, y = frac, label = Species, color = Group)) +
+      geom_text_repel(data = aoc_ssd, aes(x = Conc, y = frac, label = Species, color = Group), nudge_x = 0.2, size = 4, segment.alpha = 0.5, max.overlaps = Inf) + #species labels
+      scale_y_continuous("Species Affected (%)", labels = scales::percent, limits = c(0,1)) +
+      #expand_limits(x = c(0.000000001, 100000)) + #ensure species labels fit
+      # reactive x axis based on alignment
+      xlab(ifelse(ERM_check_ssd == "Unaligned", dose_check_ssd,
+           paste0(dose_check_ssd, " (",lower_length_ssd, " to ",upper_length_ssd, " um)"))
+           )+
+      labs(
+        title = "Microplastics Species Sensitivity Distribution",
+             subtitle = paste("(ERM = ",ERM_check_ssd,")")) +
+      coord_trans(x = "log10") +
+      scale_x_continuous(breaks = scales::trans_breaks("log10", function(x) 10^x, n = 15),
+                         labels = trans_format("log10", scales::math_format(10^.x))) + #comma_signif)+
+      # geom_segment(data = aoc_hc,aes(x = est, y = percent/100, xend = est, yend = est), linetype = 'dashed', color = "red", size = .5) + #hazard conc line vertical
+      # geom_segment(data = aoc_hc,aes(x = lcl, y = percent/100, xend = est, yend = percent/100), linetype = 'dashed', color = "red", size = .5) + #hazard conc line horizontal
+      # geom_text(data = aoc_hc, aes(x = est, y = 0.15, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 5) + #label for hazard conc
+      # geom_text(data = aoc_hc, aes(x = est, y = 0.10, label = paste0(est_format, " ", dose_check_ssd)), color = "red", size = 5) + #label for hazard conc
+      geom_text(data = aoc_hc, aes(x = Inf, y = 0.15, hjust = 1.2, vjust = 0, label = paste0(percent, "% Hazard Confidence Level")), color = "red", size = 5) + #label for hazard conc
+      geom_text(data = aoc_hc, aes(x = Inf, y = 0.10, hjust = 1.4, vjust = 0, label = paste0(est_format, " ", dose_check_ssd)), color = "red", size = 5) + #label for hazard conc
+      geom_label(data = aoc_pred, aes(x = 100000, y = -0.05, label = paste0("distribution:", dist)), color = "darkcyan", size = 5) + #label for distribution
+      fill.type + #user-selected
+      color.type + #user-selected
+      theme.type + #user theme
+      theme(plot.title = element_text(hjust = 0.5),
+            plot.subtitle = element_text(hjust = 0.5))
+    
+    ssd_ggplot
+  })
+  
+  
+  output$aoc_ssd_ggplot <- renderPlot({
+    ssd_ggplot()
+  })
+  
+  
+  #hover text for info
+  output$info <- renderText({
+    dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL
+    
+    xy_str <- function(e) {
+      if(is.null(e)) return("NULL\n")
+      paste0(dose_check_ssd, " = ", format(e$x,scientific = TRUE), " percent =", percent(e$y), "\n")
+    }
+    
+    paste0(
+      "", xy_str(input$plot_hover)
+    )
+  })
+  
+  # Create downloadable png of ssd plot
+  output$downloadSsdPlot <- downloadHandler(
+    
+    filename = function() {
+      paste('SSD_plot', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      # #define user inputs
+      # width <- isolate(input$user_width)
+      # height <- isolate(input$user_height)
+      device <- function(..., width, height) {
+        grDevices::png(..., width = 10, height = 8, res = 250, units = "in")
+      }
+      ggsave(file, plot = ssd_ggplot(), device = device)
+    })
+  
+  
+  #### SSD Plotly ####
+  ssd_plotly <- reactive({
+    req(input$ssdPred) #won't start until button is pressed for prediction
+    
+    aoc_pred <- aoc_pred()
+    
+ 
+    dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL ("Particles/mL" is default)
+    ERM_check_ssd <-  input$ERM_check_ssd# "Unaligned" is default
+    lower_length_ssd <- input$lower_length_ssd #1 is default
+    upper_length_ssd <- input$upper_length_ssd #50000 is default
+    aoc_ssd <- aoc_filter_ssd() %>% arrange(Conc) #static
+    
+    #calcualte fraction
+    aoc_ssd$frac <- ppoints(aoc_ssd$Conc, 0.5)
+    
+    #convert hazard concentration to sig digits
+    aoc_hc <- aoc_hc()
+    aoc_hc$est_format <-format(aoc_hc$est, digits = 3, scientific = TRUE)
+    
+    #Sort data by percent so the ribbon polygon is correct
+    aoc_pred_sorted <- aoc_pred[order(aoc_pred$percent), ]
+    #Construct the polygon for CI
+    ribbon_x <- c(aoc_pred_sorted$lcl, rev(aoc_pred_sorted$ucl))
+    ribbon_y <- c(aoc_pred_sorted$percent / 100, rev(aoc_pred_sorted$percent / 100))
+    
+    # Comma-format the dose_check_ssd, lower_length_ssd, and upper_length_ssd
+    dose_label <- formatC(dose_check_ssd,     big.mark=",", format="fg", digits=3)
+    
+    upper_fmt  <- formatC(upper_length_ssd,  big.mark=",", format="fg", digits=3)
+    
+    #build plotly
+    ssdplotly <- plot_ly() %>%
+      # CI Ribbon 
+      add_trace(
+        name      = "X-Ribbon",      # internal name
+        showlegend= FALSE,           # hide from legend
+        type      = "scatter",
+        mode      = "lines",
+        x         = ribbon_x,
+        y         = ribbon_y,
+        fillcolor = "gray",
+        line      = list(color = "gray"),
+        hoverinfo = "none"
+      ) %>%
+      # Prediction line
+      add_trace(
+        data      = aoc_pred,
+        name      = "Prediction",
+        showlegend= FALSE,           # hide from legend
+        type      = "scatter",
+        mode      = "lines",
+        x         = ~est,
+        y         = ~(percent / 100),
+        line      = list(color = "black"),
+        text  = ~paste(
+          "% Species Affected:", signif((percent), 2),  "<br>",
+          "Predicted Concentration:", signif((est), 2), dose_check_ssd
+        ),
+        hoverinfo = "text"
+      ) %>%
+      # species points
+      add_trace(
+        data  = aoc_ssd,
+        type  = "scatter",
+        mode  = "markers",
+        x     = ~Conc,
+        y     = ~frac,
+        color = ~Group,
+        colors = "Set3",
+        text  = ~paste(
+          "Species:", Species, "<br>",
+          "Group:", Group, "<br>",
+          "Predicted Concentration:", signif(Conc, 3), dose_check_ssd, "<br>",
+          "% Species Affected:", signif(frac, 3),"<br>",
+          "# Data Points for Species:", CountTotal, "<br>",
+          "Mean Effect Concentration for Species:", signif(meanConcEffect,3), "<br>",
+          "Standard Deviation for Species:", signif(SDConcEffect,3), "<br>",
+          "Environment for Species:", MinEnvironment, "<br>",
+          "Most Sensitive Effect for Species:", Minlvl2EffectType, "<br>",
+          "DOI of Most Sensitive Study for Species:", MinDoi
+        ),
+        hoverinfo = "text"
+      ) %>%
+      # Species labels (Plotly has no "repel")
+      add_trace(
+        data         = aoc_ssd,
+        type         = "scatter",
+        mode         = "text",
+        x            = ~Conc,
+        y            = ~frac,
+        color        = ~Group,
+        colors       = "Set3",
+        text         = ~Species,
+        textposition = "top right",
+        showlegend   = FALSE,
+        hoverinfo    = "none"
+      ) %>%
+      # Layout: log-scale x-axis, custom y-axis, annotations
+      layout(
+        title = list(
+          text = paste0(
+            "Microplastics Species Sensitivity Distribution",
+            "<br><span style='font-size:14px'>(ERM = ", ERM_check_ssd, ")</span>"
+          )
+        ),
+        xaxis = list(
+          type  = "log",
+         # tickformat    = ".0e",  # Forces scientific notation with 2 decimal places
+          exponentformat= "e",     # Style of exponent (common choices: 'none','e','E','power','SI')
+          title = if (ERM_check_ssd == "Unaligned") {
+            paste0(dose_check_ssd, " (Unaligned)")
+          } else {
+            paste0(dose_check_ssd, " (", lower_length_ssd, " to ", upper_fmt, " µm)")
+          }
+        ),
+        yaxis = list(
+          title      = "Species Affected (%)",
+          range      = c(0, 1),
+          tickformat = ".0%"
+        ),
+        annotations = list(
+          # (1) Hazard Confidence Level annotation at the relevant data point
+          list(
+            x = log10(as.numeric(aoc_hc$est_format)),                 # data coordinate for x
+            y = aoc_hc$percent / 100,       # data coordinate for y
+            xref = "x", 
+            yref = "y",
+            text = paste0(aoc_hc$percent, "% Hazard Confidence Level", "<br>",
+                          aoc_hc$est_format, " ", dose_check_ssd),
+            showarrow = TRUE,
+            arrowhead = 7,
+            arrowcolor = "red",        # ARROW IS NOW RED
+            #ax = -40,                        # shift the label slightly in pixels
+            ay = -100,
+            font = list(color = "red", size = 14)
+          )
+        )
+      )
+    
+    ssdplotly
+  })
+  
+  # render ssd plotly #
+  output$aoc_ssd_plotly <- renderPlotly({
+    ssd_plotly()
+  })
+  
+  # SSD Table
+
+  output$ssd_pred_table <- DT::renderDataTable(server = FALSE,{ #server= FALSE prints ALL data, not just what's shown
+    dose_check_ssd <- input$dose_check_ssd #assign whether or not to use particles/mL or mass/mL
+     req(aoc_pred())
+    aoc_pred <- aoc_pred() %>% 
+      mutate_if(is.numeric, ~ signif(., 3))
+    
+      datatable(aoc_pred,
+                rownames = FALSE,
+                style = "bootstrap",
+                extensions = c('Buttons', 'Scroller'),
+                options = list(
+                  autoWidth = FALSE,
+                  dom = 'Brtip',
+                  scrollY = 400,
+                  scroller = TRUE,
+                  buttons = c('copy', 'csv', 'excel')
+                ), 
+                class = "compact",
+                colnames = c("Hazard Concentration (%)", paste0("Estimated Mean Concentration ",  dose_check_ssd), paste0("Standard Error ",  dose_check_ssd), "Lower 95% Confidence Limit", 
+                             "Upper 95% Confidence Limit", "Distribution", "Proportion of Data Sets Successfully Fitted"),
+                caption = "Predicted species sensitivity distribution concentrations with uncertanties.
+                Note: Mehinto et al. (2022) (doi: 10.1186/s43591-022-00033-3) refers to the point estimate as the 'median' which is interchangable with the 'estimated mean concentration' reported in the table below. If 10 or more iterations are used to bootstrap the model, the mean and median become identical.")
+               
+  })
+  
+  output$databaseDataTable <- DT::renderDataTable(
+    aoc_search,
+    filter = "top",
+    rownames = FALSE,
+    style = "bootstrap",
+    options = list(
+      dom = 'ltipr',
+      scrollY = 600,
+      scrollX = TRUE,
+      autoWidth = TRUE,
+      bautoWidth = FALSE
+    ))
+  
+
+  # Cullen and Frey Graph
+  output$ssd_CF_plot <- renderPlot({
+    req(nrow(aoc_filter_ssd())>0)
+    #reactive to static
+    aoc_SSD <- aoc_filter_ssd()
+    
+    #log10 transform vector
+    logConc <- log10(subset(aoc_SSD)$Conc) 
+    
+    #print plot
+    fitdistrplus::descdist(logConc,boot=1000)
+  })
+  
+  #alt fits with fitdistrplus package
+  aocSSDFitLNorm <- reactive({
+    #reactive to static
+    aocSSD <- aoc_filter_ssd()
+    #subset and define variable
+    Conc <- aocSSD$Conc
+    
+    #fit log-normal distribution
+    fitdistrplus::fitdist(Conc, "lnorm")
+  })
+  
+  #alt fits with fitdistrplus package
+  aocSSDFitLlogis <- reactive({
+    #reactive to static
+    aocSSD <- aoc_filter_ssd()
+    #subset and define variable
+    Conc <- aocSSD$Conc
+    
+    #fit logistic distribution
+    fitdistrplus::fitdist(Conc, "logis")
+  })
+  
+  #alt fits with fitdistrplus package
+  aocSSDFitWeibull <- reactive({
+    #reactive to static
+    aocSSD <- aoc_filter_ssd()
+    #subset and define variable
+    Conc <- aocSSD$Conc
+    
+    #fit logistic distribution
+    fitdistrplus::fitdist(Conc, "weibull")
+  })
+  
+  #QQ plot
+  output$ssd_qq_plot <- renderPlot({
+    #req
+    req(nrow(aoc_filter_ssd())>0)
+    
+    #reactive to static
+    aocFitLNorm <- aocSSDFitLNorm()
+   # aocFitLogis <- aocSSDFitLogis() #not working right now
+    aocFitWeibull <- aocSSDFitWeibull()
+    
+    #plot
+    fitdistrplus::qqcomp(list(aocFitLNorm,
+      #aocFitLogis,
+      aocFitWeibull),
+           legendtext=c("log-normal", "Weibull"))
+  })
+  
+  #pp plot
+  output$ssd_pp_plot <- renderPlot({
+    #req
+    req(nrow(aoc_filter_ssd())>0)
+    
+    #reactive to static
+    aocFitLNorm <- aocSSDFitLNorm()
+    # aocFitLogis <- aocSSDFitLogis()
+    aocFitWeibull <- aocSSDFitWeibull()
+    #plot
+    fitdistrplus::ppcomp(list(aocFitLNorm, 
+              #aocFitLogis, 
+              aocFitWeibull),
+         legendtext=c("log-normal",
+                      #"logistic",
+                      "weibull"))
+  })
+  
+  #Histogram
+  output$ssd_dens_plot <- renderPlot({
+    #req
+    req(nrow(aoc_filter_ssd())>0)
+    
+    #reactive report x-axis
+    dose_check_ssd <- input$dose_check_ssd
+    
+    #reactive to static
+    aocSSD <- aoc_filter_ssd()
+    #subset and define variable
+    logConc <- log10(aocSSD$Conc)
+    
+    #fit  distributions to log10 data
+    aocFitNorm <- fitdistrplus::fitdist(logConc, "norm")
+    #aocFitlogis <- fitdist(logConc, "logis")
+    
+    
+    #plot densities
+    fitdistrplus::denscomp(list(aocFitNorm),#, aocFitLogis),
+           legendtext=c("log-normal"),#,"log-logistic"),
+           xlab = paste0("log10 ",dose_check_ssd))
+  })
+  
+  output$downloadData_ssd <- downloadHandler(
+    filename = paste('SSD_RawData', Sys.Date(), '.csv', sep=''),
+    
+    content = function(file) {
+      
+      ssd_raw_data_tidy <- aoc_ssd_filtered() %>%
+                  ungroup() %>% 
+        drop_na(dose_new) %>%
+        mutate(Alignment = input$ERM_check_ssd) %>% 
+        mutate(`Dose Metric` = input$dose_check_ssd) %>% 
+        mutate(`Unaligned Dose Values` = case_when(
+          input$dose_check_ssd == "Particles/mL" ~ dose.particles.mL.master,
+          input$dose_check_ssd == "µg/mL" ~ dose.mg.L.master,
+          input$dose_check_ssd == "µm3/mL" ~ dose.um3.mL.master,
+          input$dose_check_ssd == "µm2/mL" ~ dose.um2.mL.master,
+          input$dose_check_ssd == "µm2/µg/mL" ~ dose.um2.ug.mL.master,
+          input$dose_check_ssd == "Particles/kg sediment" ~ dose.particles.kg.sediment.master,
+          input$dose_check_ssd == "mg/kg sediment" ~ dose.mg.kg.sediment.master,
+          input$dose_check_ssd == "µm3/kg sediment" ~ dose.um3.kg.sediment.master,
+          input$dose_check_ssd == "µm2/kg sediment" ~ dose.um2.kg.sediment.master,
+          input$dose_check_ssd == "µm2/µg/kg sediment" ~ dose.um2.ug.kg.sediment.master)) %>%  
+        #Select columns
+        dplyr::select(c(doi, authors, year, Species, Group, env_f, life_f, vivo_f, sex, body.length.cm, max.size.ingest.mm,
+                        #experimental parameters
+                        exp_type_f, exposure.route, mix, negative.control, reference.material, exposure.media, solvent, detergent,
+                        media.ph, media.sal.ppt, media.temp, media.temp.min, media.temp.max, exposure.duration.d, `Recovery (Days)`, acute.chronic_f,
+                        treatments, replicates, sample.size, dosing.frequency, chem.add.nominal, chem.add.dose.mg.L.nominal, chem.add.dose.mg.L.measured,
+                        #selected dose
+                        dose_new, `Unaligned Dose Values`, `Dose Metric`, Alignment,
+                        #biological effects
+                        effect_f, direction, lvl1_f, lvl2_f, lvl3_f, bio_f, target.cell.tissue, effect.metric,
+                        #particle characteristics
+                        poly_f, shape_f, density.g.cm3, density.reported.estimated, charge, zetapotential.mV, zetapotential.media, functional.group,
+                        size.length.um.used.for.conversions, size.width.um.used.for.conversions, size_f, particle.surface.area.um2, particle.volume.um3,
+                        mass.per.particle.mg, weather.biofoul_f,
+                        #quality
+                        size.valid, polymer.valid, shape.valid, particle.source, sodium.azide, contaminant.screen, clean.method, sol.rinse, background.plastics,
+                        concentration.valid, particle.behavior, uptake.valid, uptake.valid.method, tissue.distribution, fed)) %>%
+        #Rename columns
+        dplyr::rename(c("DOI" = doi, "Authors" = authors, "Year" = year, "Species" = Species, "Organism Group" = Group, "Environment" = env_f,
+                        "Life Stage" = life_f, "In vitro/in vivo" = vivo_f, "Sex" = sex, "Estimated Body Length (cm)" = body.length.cm,
+                        "Estimated Maximum Ingestible Size (mm)" = max.size.ingest.mm,
+                        #experimental parameters
+                        "Experiment Type" = exp_type_f, "Exposure Route" = exposure.route, "Particle Mix?" = mix, "Negative Control" = negative.control,
+                        "Reference Particle" = reference.material, "Exposure Media" = exposure.media, "Solvent" = solvent, "Detergent" = detergent,
+                        "pH" = media.ph, "Salinity (ppt)" = media.sal.ppt, "Temperature (Avg)" = media.temp, "Temperature (Min)"= media.temp.min,
+                        "Temperature (Max)" = media.temp.max, "Exposure Duration (days)" = exposure.duration.d, "Acute/Chronic" = acute.chronic_f,
+                        "Number of Doses" = treatments, "Replicates" = replicates, "Sample Size" = sample.size, "Dosing Frequency" = dosing.frequency,
+                        "Chemicals Added" = chem.add.nominal, "Added Chemical Dose (nominal)" = chem.add.dose.mg.L.nominal,
+                        "Added Chemical Dose (measured)" = chem.add.dose.mg.L.measured,
+                        #selected dose
+                        "Plotted Dose Values" = dose_new,
+                        #biological effects
+                        "Effect" = effect_f, "Direction" = direction, "Broad Endpoint Category" = lvl1_f, "Specific Endpoint Category" = lvl2_f,
+                        "Endpoint" = lvl3_f, "Level of Biological Organization" = bio_f, "Target Cell or Tissue" = target.cell.tissue,
+                        "Effect Metric" = effect.metric,
+                        #particle characteristics
+                        "Polymer" = poly_f, "Shape" = shape_f, "Density (g/cm^3)" = density.g.cm3, "Density, reported or estimated" = density.reported.estimated,
+                        "Charge" = charge, "Zeta Potential (mV)" = zetapotential.mV, "Zeta Potential Media" = zetapotential.media, "Functional Group" = functional.group,
+                        "Particle Length (μm)" = size.length.um.used.for.conversions, "Particle Width (μm)" = size.width.um.used.for.conversions,
+                        "Size Category" = size_f, "Particle Surface Area (μm^2)" = particle.surface.area.um2, "Particle Volume (μm^3)" = particle.volume.um3,
+                        "Particle Mass (mg)" = mass.per.particle.mg, "Weathered or Biofouled?" = weather.biofoul_f,
+                        #quality
+                        "Size Validated?" = size.valid, "Polymer Validated?" = polymer.valid, "Shape Validated" = shape.valid, "Particle Source" = particle.source,
+                        "Sodium Azide Present?" = sodium.azide, "Screened for Chemical Contamination?" = contaminant.screen, "Particle Cleaning?" = clean.method,
+                        "Solvent Rinse" = sol.rinse, "Background Contamination Monitored?" = background.plastics,
+                        "Concentration Validated?"  = concentration.valid, "Particle Behavior" = particle.behavior, "Uptake Validated?" = uptake.valid,
+                        "Uptake Validation Method" = uptake.valid.method, "Tissue Distribution" = tissue.distribution, "Organisms Fed?" = fed)) 
+  
+      readr::write_excel_csv(ssd_raw_data_tidy, file)
+  })
+  
+  
+  ### Datatable for SSD (full aligned dataset)
+  
+  
+  output$SSD_fullDatatable <- DT::renderDataTable({
+    req(aoc_ssd_filtered())
+    
+    ssd_raw_data_tidy <- aoc_ssd_filtered() %>%
+      ungroup() %>% 
+      drop_na(dose_new) %>%
+      mutate(Alignment = input$ERM_check_ssd) %>% 
+      mutate(`Dose Metric` = input$dose_check_ssd) %>% 
+      mutate(`Unaligned Dose Values` = case_when(
+        input$dose_check_ssd == "Particles/mL" ~ dose.particles.mL.master,
+        input$dose_check_ssd == "µg/mL" ~ dose.mg.L.master,
+        input$dose_check_ssd == "µm3/mL" ~ dose.um3.mL.master,
+        input$dose_check_ssd == "µm2/mL" ~ dose.um2.mL.master,
+        input$dose_check_ssd == "µm2/µg/mL" ~ dose.um2.ug.mL.master,
+        input$dose_check_ssd == "Particles/kg sediment" ~ dose.particles.kg.sediment.master,
+        input$dose_check_ssd == "mg/kg sediment" ~ dose.mg.kg.sediment.master,
+        input$dose_check_ssd == "µm3/kg sediment" ~ dose.um3.kg.sediment.master,
+        input$dose_check_ssd == "µm2/kg sediment" ~ dose.um2.kg.sediment.master,
+        input$dose_check_ssd == "µm2/µg/kg sediment" ~ dose.um2.ug.kg.sediment.master)) %>%  
+      dplyr::select(Group, Species, env_f,  dose_new, `Dose Metric`, Alignment, ingestion.translocation,
+                    `Unaligned Dose Values`,
+                    EC_env_v.particles.mL, EC_poly_v.particles.mL,
+                    EC_mono_p.particles.mL, mu.v.mono, 
+                    size.height.max.um.ingest,
+                    size.width.max.um.ingest,
+                    size.length.max.um.ingest,
+                    particle.volume.um3.min, particle.volume.um3.max,
+                    R.ave,
+                    mu.v.poly,
+                    
+                    effect.metric, acute.chronic_f,
+                    x2M, EC_poly_p.particles.mL,  CF_bio,
+                    AF.total, 
+                    max.size.ingest.um, body.length.cm, 
+                    lvl1_f, lvl2_f,
+                    poly_f, shape_f, size.length.um.used.for.conversions, size.width.um.used.for.conversions, 
+                    particle.surface.area.um2,  particle.volume.um3,  mass.per.particle.mg, density.g.cm3,
+                    polydispersity,
+                    doi, authors, year
+                    ) %>%
+      mutate_if(is.numeric, ~signif(., 3)) %>% 
+      droplevels() %>% 
+      arrange(dose_new)
+    
+    
+    dt <- datatable(ssd_raw_data_tidy,
+                    rownames = F,
+                    extensions = 'Buttons', #enable buttons extension
+                    filter = "top",
+                    options = list(pageLength = 25, autoWidth = TRUE,  width = '100%', scrollX = TRUE,
+                                   dom = 'Blrtip', 
+                                   buttons = list(
+                                     # insert buttons with copy and print
+                                     # colvis includes the button to select and view only certain columns in the output table
+                                     # from https://rstudio.github.io/DT/extensions.html 
+                                     I('colvis'), 'copy', 'print',
+                                     # code for the first dropdown download button. this will download only the current page only (depends on the number of rows selected in the lengthMenu)
+                                     # using modifier = list(page = "current")
+                                     # only the columns visible will be downloaded using the columns:":visible" option from:
+                                     list(extend = 'collection', buttons = list(list(extend = "csv", filename = "page",exportOptions = list(
+                                       columns = ":visible",modifier = list(page = "current"))),
+                                       list(extend = 'excel', filename = "page", title = NULL, 
+                                            exportOptions = list(columns = ":visible",modifier = list(page = "current")))),
+                                       text = 'Download current page'),
+                                     # code for the  second dropdown download button
+                                     # this will download the entire dataset using modifier = list(page = "all")
+                                     list(extend = 'collection',
+                                          buttons = list(list(extend = "csv", filename = "data",exportOptions = list(
+                                            columns = ":visible",modifier = list(page = "all"))),
+                                            list(extend = 'excel', filename = "data", title = NULL, 
+                                                 exportOptions = list(columns = ":visible",modifier = list(page = "all")))),
+                                          text = 'Download all data')),
+                                   # add the option to display more rows as a length menu
+                                   lengthMenu = list(c(10, 30, 50, -1),
+                                                     c('10', '30', '50', 'All'))),class = "display"
+    )
+    
+    numericColumns <- c("Unaligned Dose Values", "dose_new")
+    
+    # Assuming dt is your DataTable object and numeric_columns are defined
+    for (col in numericColumns) {
+      # This is where you'd apply the static color scale and determine the text color
+      dt <- dt %>% formatStyle(
+        columns = col,
+        valueColumns = col,
+        backgroundColor = styleInterval(c(1e-9, 1e-7, 1e-5, 1e-3, 1e-1, 1e1, 1e3, 1e5, 1e7), c("#ADD8E6", "#99C0DB", "#86A8D1", "#7390C7",
+                                                                                               "#6078BD", "#4C60B3", "#3948A9", 
+                                                                                               "#26309F", "#131895", "#00008B")),
+        color = styleInterval(c(1e-9, 1e-7, 1e-5, 1e-3, 1e-1, 1e1, 1e3, 1e5, 1e7), c("black", "black", "black", "black",
+                                                                                     "black", "white", "white", "white",
+                                                                                     "white", "white"))  # Adjust text color based on background
+      )
+    }
+    dt %>%  formatSignif(columns = c(numericColumns, "max.size.ingest.um", "particle.surface.area.um2",  "particle.volume.um3",  "mass.per.particle.mg"), 
+                         digits = 3) 
+  })
+  
+  ###### Calculators ######
+  simulated_distribution <- eventReactive(list(input$go_simulate),{
+
+    #default parameters for simulated distribution
+    mu1 <- 0.08
+    mu2 <- 0.44
+    sd1 <- 0.03
+    sd2 <- 0.19
+    lambda1 <- 0.06
+    lambda2 <- 0.94
+    d.alpha <- 73.8 #tail heaviness
+    d.beta <- 69.9  #asymmetry
+    d.mu <- 0.840   #location
+    d.delta <- 0.0972 #scale
+    ###### Simulated  Distribution Functions ######
+    ### Data builer equations ###
+    X.func <- function (X, xmin, alpha){
+      success <- FALSE
+      while (!success){
+        U = runif(1, 0, 1)
+        X = xmin*(1-U)^(1/(1-alpha))
+        success <- X < 5000} ##should be smaller than 5000 um 
+      return(X)}
+    
+    D.func <- function (D){
+      success <- FALSE
+      while (!success){
+        D = rnig(1, mu = d.mu, alpha = d.alpha, beta = d.beta, delta = d.delta)
+        success <- D < 2.63} ## include upper limit of 2.63, the max. 
+      return(D)
+    }
+    
+    #functions to create simualted data
+    synthetic_data_builder <- function(count, alpha, xmin){
+      #Preset parameters for pdfs
+      ## Generate values for the three distributions
+      set.seed(123)
+      simulated.data <- data.frame(Size = numeric(0))
+      
+      for(i in 1:count){
+        X <- X.func(xmin = xmin, alpha = alpha)
+        simulated.data <- rbind(simulated.data, X)
+      }
+      # SIZE #
+      colnames(simulated.data) <- c("Size")
+      ## SHAPE DISTRIBUTION
+      #Sample N random uniforms U
+      U =runif(count)
+      #Sampling from the mixture
+      for(i in 1:count){
+        if(U[i]<lambda1){
+          simulated.data$Shape[i] = rtnorm(1,mu1,sd1, lower = 0, upper = 1)
+        }else{
+          simulated.data$Shape[i] = rtnorm(1,mu2,sd2, lower = 0, upper = 1)
+        }
+      }
+      ## DENSITY DISTRIBUTION
+      Dens <- data.frame(Density = numeric(0));
+      for(i in 1:count){
+        X <- D.func()
+        Dens <- rbind(Dens, X)}
+      colnames(Dens) <- c("Density")
+      simulated.data <- cbind(simulated.data, Dens)
+      #add info
+      simulated.distribution <- simulated.data %>%
+        mutate(size.category = factor(case_when(
+          Size < 0.01 & Size >= 0.001 ~ "10nm < 1nm",
+          Size < 0.1 & Size >= 0.010 ~ "100nm < 10nm",
+          Size < 1 & Size >= 0.100 ~ "100nm < 1µm",
+          Size < 10 & Size >= 1 ~ "1µm < 10µm",
+          Size < 100 & Size >= 10 ~ "10µm < 100µm",
+          Size < 1000 & Size >= 100 ~ "100µm < 1mm",
+          Size < 5000 & Size >= 1000 ~ "1mm < 5mm"))) %>%
+        mutate(mass.mg = Density * Size^3 * 1E-9) %>%
+        mutate(um3 = (Size^3)) %>%
+        mutate(particles.total = factor(as.character(count)))
+    } # end of builder function
+    
+    #variables to set for funcions (user-defined)
+  xmin.user <- input$xmin_calculator #UM
+  alpha.user <- input$length_alpha_calculator #for marine surface water Kooi et al 2021
+  count.user <- input$particle.count_calculator
+  
+    #build
+    simulated.distribution <- synthetic_data_builder(count = count.user, xmin = xmin.user, alpha = alpha.user)
+    #save
+    simulated.distribution
+  })
+  
+  
+  simulatedDistribution_ggplot <- reactive({
+   # req(input$go_simulate) #won't start until button is pressed for simulattion
+    ### User defined colors
+    
+    
+    #Theme type
+    theme.type<-switch(input$theme.type_calculator,
+                       "light" 	= theme_minimal(base_size = 15),
+                       "dark" = dark_theme_minimal(base_size = 15)) 
+    #color selection
+    fill.type <- switch(input$color.type_calculator,
+                        "viridis" = scale_fill_viridis(discrete = TRUE),
+                        "brewer" =  scale_fill_brewer(palette = "Paired"),
+                        "tron" = scale_fill_tron(),
+                        "locusZoom" = scale_fill_locuszoom(),
+                        "d3" = scale_fill_d3(),
+                        "Nature" = scale_fill_npg(),
+                        "JAMA" = scale_fill_jama())
+    #color selection
+    color.type <- switch(input$color.type_calculator,
+                         "viridis" = scale_color_viridis(discrete = TRUE),
+                         "brewer" =  scale_color_brewer(palette = "Paired"),
+                         "tron" = scale_color_tron(),
+                         "locusZoom" = scale_color_locuszoom(),
+                         "d3" = scale_color_d3(),
+                         "Nature" = scale_color_npg(),
+                         "JAMA" = scale_color_jama())
+  
+  ### histrogram of simulate data ###
+      #plot
+    simulated_distribution() %>% 
+      ggplot(aes(x = Size, fill = size.category)) +
+      scale_x_log10(name = "Particle Length (um)",
+                        # labels = scales::scientific,
+                         limits = c(input$xmin_calculator, 5000)) +
+      labs(title = "Simulated Microplastics Particle Data", fill = "Size Category") +
+      geom_histogram(binwidth = input$userBinwidth) +
+      fill.type +  
+      theme.type
+    })
+  
+# Render user-created histogram
+    output$simulated.data.histogram <- renderPlot({
+    simulatedDistribution_ggplot()
+  })
+    
+    ## Create PNG of plot for downloading
+    
+    output$downloadPlot_simulate <- downloadHandler(
+      filename = function() {
+        paste('SimulatedDataHistogram-', Sys.Date(), '.png', sep='')
+      },
+      content = function(file) {
+        ggsave(file, plot = simulated.data.histogram(), width = 16, height = 8, device = 'png')
+      })
+    
+  
+  # Create downloadable csv of filtered dataset.
+  # Removed columns created above so the dataset matches Leah's original dataset.
+  output$downloadData_simulate <- downloadHandler(
+    filename = function() {
+      paste('simulated_data-', Sys.Date(), '.csv', sep='')
+    },
+    content = function(file) {
+      write.csv(simulated_distribution() %>% dplyr::rename(c("Size (um)" = Size, "Shape (CSF, unitless)" = Shape, "Density (g cm^3)" = Density, "Mass (mg)" = mass.mg, "Volume (um^3)" = um3)), file, row.names = FALSE)
+    }
+  )
+  
+  #########################
+  ###### Alignment Calculator ######
+  ###############################
+  ###### Alpha Value Radio Buttons ######
+  observe_alpha_updates("alpha.value.matrix_calculator", "_calculator", input, session)
+  
+  
+  #### create test dataset for alignment calculator from aoc_z ###
+  #please keep!
+  # alignment_example_df <- aoc_z %>%
+  #   select(Group,
+  #          Species,
+  #          max.size.ingest.um,
+  #          dose.particles.mL.master,
+  #          polydispersity,
+  #          shape_f,
+  #          density.g.cm3,
+  #          size.length.um.used.for.conversions,
+  #          size.height.um.used.for.conversions,
+  #          size.width.um.used.for.conversions,
+  #          dose.particles.kg.sediment.master, size.length.max.um.used.for.conversions,
+  #          size.length.min.um.used.for.conversions, size.height.min.um.used.for.conversions,
+  #          size.height.max.um.used.for.conversions, size.width.min.um.used.for.conversions,
+  #          size.width.max.um.used.for.conversions, size.length.max.mm.measured,
+  #          size.length.max.mm.nominal) %>%
+  #   drop_na(dose.particles.mL.master, Species, polydispersity, density.g.cm3, max.size.ingest.um,
+  #           size.length.um.used.for.conversions, size.height.um.used.for.conversions
+  #           ) %>%
+  #   filter(shape_f != "Not Reported") %>%
+  #   sample_n(20)
+
+  # write.csv(alignment_example_df, "calculator/test_data_calculator.csv")
+  
+ 
+  # example dataset with minimum columns needed for making alignments
+  output$testData_calculator <- downloadHandler(
+    filename = function() {
+      paste('example_alignment_data', '.csv', sep='')
+    },
+    content = function(file) {
+      write.csv(test_data_calculator, file, row.names = FALSE)
+    }
+  )
+  
+  # Alignment walkthrough (based on .Rmd file from modelling repo)
+  output$illustrated_example <- downloadHandler(
+    filename = function() {
+      "Illustrated_Alignment_Example.html"
+    },
+    content = function(file) {
+      file.copy("calculator/ERM-Illustrative-Example.html", file)
+    }
+  )
+  
+  ## code to read in alignment calculator dataset and determine if ready
+  output$alignment_user_data_check <- renderUI({
+    req(input$alignment_file)
+    
+    # Read in user dataset
+    raw <- read.csv(input$alignment_file$datapath, stringsAsFactors = TRUE)
+    
+    
+    # Define the mandatory variables and their types
+    mandatory_vars <- list(
+      Group = "character",
+      dose.particles.mL.master = "numeric",
+      max.size.ingest.um = "numeric",
+      polydispersity = "character",
+      size.length.um.used.for.conversions = "numeric",
+      size.height.um.used.for.conversions = "numeric",
+      size.width.um.used.for.conversions = "numeric",
+      shape_f = "character",
+      density.g.cm3 = "numeric"
+    )
+    
+    # Define allowable values for character variables
+    allowable_values <- list(
+      Group = c("Crustacea", "Mollusca", "Annelida", "Algae", "Cnidaria", "Fish", 
+                "Echinoderm", "Mixed", "Bacterium", "Rotifera", "Plant", "Insect", 
+                "Dinoflagellate", "Ciliophora", "Cyanobacteria"),
+      polydispersity = c("monodisperse", "polydisperse"),
+      shape_f = c("Fiber", "Fragment", "Sphere")
+    )
+    
+    # Function to check if all mandatory variables are present and valid
+    check_dataset <- function(data) {
+      issues <- list()
+      
+      # Check for missing mandatory variables
+      missing_vars <- setdiff(names(mandatory_vars), names(data))
+      if (length(missing_vars) > 0) {
+        issues <- c(issues, paste("Missing variables:", paste(missing_vars, collapse = ", ")))
+      }
+      
+      # Check variable types and allowable values for character or factor variables
+      for (var in names(mandatory_vars)) {
+        if (var %in% names(data)) {
+          expected_type <- mandatory_vars[[var]]
+          actual_type <- class(data[[var]])
+          
+          # Allow both character and factor for specific variables
+          if (var %in% names(allowable_values)) {
+            if (!is.character(data[[var]]) && !is.factor(data[[var]])) {
+              issues <- c(issues, paste("Variable", var, "should be a character or factor but is", actual_type))
+            } else {
+              # Convert factor to character for validation
+              unique_values <- unique(as.character(data[[var]]))
+              invalid_values <- setdiff(unique_values, allowable_values[[var]])
+              if (length(invalid_values) > 0) {
+                issues <- c(issues, paste("Variable", var, "has invalid values:", 
+                                          paste(invalid_values, collapse = ", "), 
+                                          ". Valid values are:", 
+                                          paste(allowable_values[[var]], collapse = ", ")))
+              }
+            }
+          } else if (expected_type == "numeric" && !(actual_type %in% c("numeric", "integer"))) {
+            # Allow both numeric and integer for numeric variables
+            issues <- c(issues, paste("Variable", var, "should be numeric but is", actual_type))
+          } else if (expected_type == "character" && actual_type != "character") {
+            issues <- c(issues, paste("Variable", var, "should be character but is", actual_type))
+          }
+        }
+      }
+      
+      
+      # Check specific conditions for "polydisperse" rows
+      if ("polydispersity" %in% names(data) && "polydisperse" %in% unique(as.character(data$polydispersity))) {
+        polydisperse_rows <- data %>% filter(as.character(polydispersity) == "polydisperse")
+        conditional_vars <- c(
+          "size.length.max.um.used.for.conversions",
+          "size.length.min.um.used.for.conversions",
+          "size.height.min.um.used.for.conversions",
+          "size.height.max.um.used.for.conversions",
+          "size.width.min.um.used.for.conversions",
+          "size.width.max.um.used.for.conversions"
+        )
+        
+        for (var in conditional_vars) {
+          if (var %in% names(data)) {
+            # Check missingness only for rows where polydispersity == "polydisperse"
+            if (any(is.na(polydisperse_rows[[var]]))) {
+              issues <- c(issues, paste("Variable", var, "has missing values for rows where 'polydispersity' is 'polydisperse'"))
+            }
+          } else {
+            issues <- c(issues, paste("Variable", var, "is missing but required for rows where 'polydispersity' is 'polydisperse'"))
+          }
+        }
+      }
+      
+      # Return issues
+      return(issues)
+    }
+    
+    # Check the dataset
+    issues <- check_dataset(raw)
+    
+    # Generate UI output
+    if (length(issues) == 0) {
+      # If no issues, display green text
+      HTML("<span style='color: green; font-weight: bold;'>Dataset is good to go!</span>")
+    } else {
+      # If there are issues, display red text with the list of issues
+      issue_text <- paste("<span style='color: red; font-weight: bold;'>Issues found in the dataset:</span><br>",
+                          paste(paste0("- ", issues), collapse = "<br>"))
+      HTML(issue_text)
+    }
+  })
+  
+  
+  
+  #### prep user data for alignment ####
+  alignment_user_data <- reactive({
+    # read in user data
+    raw <- read.csv(input$alignment_file$datapath, stringsAsFactors = TRUE)
+    
+    # List of variables to check
+    vars_to_check <- c("dose.particles.kg.sediment.master", 
+                       "size.length.max.um.used.for.conversions",
+                       "size.length.min.um.used.for.conversions", 
+                       "size.height.min.um.used.for.conversions",
+                       "size.height.max.um.used.for.conversions",
+                       "size.width.min.um.used.for.conversions",
+                       "size.width.max.um.used.for.conversions",
+                       "size.length.max.mm.measured",
+                       "size.length.max.mm.nominal"
+    )
+    
+    # Create a new DataFrame to store the results
+    alignment_user_data <- raw
+    
+    # Loop through each variable to check
+    for (var in vars_to_check) {
+      if (var %in% names(raw)) {
+        # If the variable exists, keep its original values
+        alignment_user_data[[var]] <- raw[[var]]
+      } else {
+        # If the variable does not exist, create a new column with NA values
+        alignment_user_data[[var]] <- NA_real_
+      }
+    }
+    
+    # Now alignment_user_data contains the original data for existing columns
+    # and NA for those that were not present in the original DataFrame.
+    
+    alignment_user_data
+  })
+  
+  ### make datatable of user data for UI (prior to alignment) ##
+  output$alignment_user_data_dt <- renderDataTable({
+      req(input$alignment_file)
+    
+    alignment_user_data <- alignment_user_data()
+    
+    datatable(alignment_user_data%>% 
+                mutate_if(is.numeric, ~ signif(., 3)),
+              extensions = c('Buttons'),
+              style = "bootstrap",
+              options = list(
+                dom = 'Brtip',
+                buttons = list(I('colvis'), c('copy', 'csv', 'excel')),
+                scrollY = 400,
+                scrollH = TRUE,
+                sScrollX = TRUE,
+                columnDefs = list(list(width = '50px', targets = "_all"))),#only display the table and nothing else
+              caption = "User Input Data for Alignment") 
+    
+  })
+  
+  
+  #align data
+  alignedData_calculator <- eventReactive(list(input$go_calculator),{
+    
+    #require align data button to be pressed to generate table
+    req(input$go_calculator)
+    
+    # read in prepped user data
+    alignment_user_data <- alignment_user_data()
+    
+        ## ERM parametrization ##
+    # Define params for alignments #
+    alpha.input = input$alpha_calculator #length power law exponent
+    x2D_set = as.numeric(input$upper_length_calculator) #upper size range (default)
+    x1D_set = input$lower_length_calculator #lower size range (default)
+    x1M_set = input$lower_length_calculator #lower size range for ingestible plastic (user defined)
+    upper.tissue.trans.size.um <- as.numeric(input$upper.tissue.trans.size.um_calculator) #user-defined upper value for tissue trans (numeric)
+    ingestion.translocation.switch <- input$ingestion.translocation.switch_calculator #user-defined: inputs are "ingestion" or "translocation"
+    ERM.switch <- input$ERM_check_calculator
+    dose_check <- input$dose_check_calculator #options: "Particles/mL", "ug/mL", um3/mL, etc.,
+    
+    # define parameters for power law coefficients
+    a.sa.input = input$a.sa_calculator #1.5 #marine surface area power law
+    a.v.input = input$a.v_calculator#1.48 #a_V for marine surface water volume
+    a.m.input = input$a.m_calculator#1.32 # upper limit fora_m for mass for marine surface water in table S4 
+    a.ssa.input = input$a.ssa_calculator #1.98 # A_SSA for marine surface water
+    
+    #define additional parameters for calculations based on averages in the environment
+    R.ave.input = input$R.ave_calculator #0.77 #average width to length ratio for microplastics in marine enviornment
+    p.ave.input = input$p.ave_calculator#1.10 #average density in marine surface water
+    H_W_ratio.input = input$H_W_ratio_calculator # 0.67
+    
+    # calculate ERM for each species
+    alignedData_calculator <- alignment_user_data %>%
+      #print values used to align
+      mutate(alpha = alpha.input,
+             x2D_set = x2D_set,
+             x1D_set = x1D_set,
+             x1M_set = x1M_set,
+             upper.tissue.trans.size.um = upper.tissue.trans.size.um,
+             ingestion.translocation.switch = ingestion.translocation.switch,
+             a.sa = a.sa.input,
+             a.v = a.v.input,
+             a.m = a.m.input,
+             a.ssa = a.ssa.input,
+             p.ave = p.ave.input,
+             R.ave = R.ave.input,
+             H_W_ratio = H_W_ratio.input 
+             ) %>% 
+      
+      ### BIOACCESSIBILITY ###
+      # define upper size length for bioaccessibility (user-defined) for ingestion (only used if user defines as such
+      mutate(x2M_ingest = case_when(is.na(max.size.ingest.um) ~ x2D_set, 
+                                    max.size.ingest.um < x2D_set ~ max.size.ingest.um,
+                                    max.size.ingest.um > x2D_set ~ x2D_set)) %>%  #set to default as upper limit or max size ingest, whichever is smaller
+      # define upper size length for Translocation 
+      mutate(x2M_trans = case_when(is.na(max.size.ingest.um) ~ upper.tissue.trans.size.um, 
+                                   max.size.ingest.um  < upper.tissue.trans.size.um ~  max.size.ingest.um,
+                                   max.size.ingest.um  > upper.tissue.trans.size.um ~ upper.tissue.trans.size.um)) %>% 
+      #define which bioaccessibility limit to use for calculations based on user input
+      mutate(ingestion.translocation = ingestion.translocation.switch) %>%  #user-defined bioaccessibility switch. Note that a
+      mutate(x2M = case_when(ingestion.translocation == "ingestion" ~ x2M_ingest,
+                             ingestion.translocation == "translocation" ~ x2M_trans,
+                             ingestion.translocation == "none" ~ x2D_set)) %>% 
+      #calculate CF_bio for all conversions
+      mutate(CF_bio = CFfnx(x1M = x1M_set, x2M = x2M, x1D = x1D_set, x2D = x2D_set, a = alpha)) %>%  
+      ###############################################################################
+    ###### Determine bioaccesible fractions for polydisperse particle experiment mixtures ####
+    ######################################################################################
+    ## assign whether polydisperse data are partially, fully, or not bioavailable
+    mutate(ingestible_poly = case_when(
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (all)",
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions <= x2M_ingest ~ "ingestible (some)",
+      polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_ingest & size.length.min.um.used.for.conversions > x2M_ingest ~ "not ingestible"),
+      translocatable_poly = case_when(
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions <= x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (all)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions <= x2M_trans ~ "translocatable (some)",
+        polydispersity == "polydisperse" & size.length.max.um.used.for.conversions > x2M_trans & size.length.min.um.used.for.conversions > x2M_trans ~ "not translocatable")
+    ) %>% 
+      ###### Collapse polydisperse and monodisperse bioavailabilities #####
+    mutate(translocatable = ifelse(size.length.um.used.for.conversions > x2M_trans, 
+                                   "not translocatable", 
+                                   "translocatable")) %>% 
+      mutate(ingestible = ifelse(size.length.um.used.for.conversions > x2M_ingest, 
+                                 "not ingestible", 
+                                 "ingestible")) %>% 
+      ## collapse poly/mono bioavailbilities
+      mutate(ingestible = case_when(
+        !is.na(ingestible_poly) ~ ingestible_poly,
+        T ~ ingestible),
+        translocatable = case_when(
+          !is.na(translocatable_poly) ~ translocatable_poly,
+          T ~ translocatable)) %>% 
+      # For the partially ingestible/translocatable study, we prepare this data for alignment using a two-step process, in which we first re-calculate #   # the effect concentration (particles/volume) using the Correction Factor equation (Koelmans et al. 2019):
+      ####### STEP 1: Re-Calculate Dose  for ingestible/translocatable fractions ####
+    mutate(size.length.max.um.used.for.conversions = case_when(
+      is.na(size.length.max.um.used.for.conversions) & is.na(size.length.max.mm.measured) ~ size.length.max.mm.nominal * 1000,
+      is.na(size.length.max.um.used.for.conversions) & !is.na(size.length.max.mm.measured) ~ size.length.max.mm.measured * 1000,
+      !is.na(size.length.max.um.used.for.conversions) ~ size.length.max.um.used.for.conversions
+      )) %>% 
+      # correct for partially translocatable particles
+      mutate(CF_bioavailable_trans = case_when(translocatable_poly == "translocatable (some)" ~ CFfnx(a = alpha,
+                                                                                                      x1D = size.length.min.um.used.for.conversions,
+                                                                                                      x2D = x2M_trans,
+                                                                                                      x1M = size.length.min.um.used.for.conversions,
+                                                                                                      x2M = size.length.max.um.used.for.conversions),
+                                               T ~ 1)) %>% # all other cases retain original dose
+      # now correct the dosage (will be fraction )
+      mutate(dose.particles.mL.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.mL.master,
+                                                 T ~ dose.particles.mL.master),
+             dose.particles.kg.trans = case_when(translocatable_poly == "translocatable (some)" ~ CF_bioavailable_trans * dose.particles.kg.sediment.master,
+                                                 T ~ dose.particles.kg.sediment.master)) %>% 
+      # correct for partially ingestible particles
+      mutate(CF_bioavailable_ingest = case_when(ingestible_poly == "ingestible (some)" ~ CFfnx(a = alpha,
+                                                                                               x1D = size.length.min.um.used.for.conversions,
+                                                                                               x2D = x2M_ingest,
+                                                                                               x1M = size.length.min.um.used.for.conversions,
+                                                                                               x2M = size.length.max.um.used.for.conversions),
+                                                T ~ 1)) %>% 
+      mutate(dose.particles.mL.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.mL.master,
+                                                  T ~ dose.particles.mL.master),
+             dose.particles.kg.ingest = case_when(ingestible_poly == "ingestible (some)" ~ CF_bioavailable_ingest * dose.particles.kg.sediment.master,
+                                                  T ~ dose.particles.kg.sediment.master)
+      ) %>% 
+      # correct for particles when no bioavailability filter selected by user
+      mutate(dose.particles.mL.no_filter = CF_bio * dose.particles.mL.master,
+             dose.particles.kg.no_filter = CF_bio * dose.particles.kg.sediment.master) %>% 
+      ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    ## calculate size parameters using compartment characteristics
+    ##### STEP 2: re-assign the min/max sizes of the particle distributions to those that are actually bioavailable within the exposure mixture,             ## labelling them accordingly for use in translocation or food dilution-associated ERM calculations.
+    ##### ----- LENGTH ------ ###
+    # no need to correct monodisperse. Min for polydispserse remains same #
+    ## polydisperse ##
+    mutate(size.length.max.um.trans = case_when(translocatable_poly == "translocatable (some)" ~ x2M_trans,
+                                                T ~ size.length.max.um.used.for.conversions),
+           size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
+                                                 T ~ size.length.max.um.used.for.conversions)) %>% 
+      ##### ----- WIDTH ------ ###
+      ## Monodisperse ##
+      mutate(size.width.um.used.for.conversions = case_when(
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        is.na(size.width.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # W = L for spheres
+        is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
+        T ~ size.width.um.used.for.conversions # if available, use as-is
+      )) %>% 
+      ### Polydisperse ###
+      # Min is always same #
+      # calculate size parameters using compartment characteristics
+      mutate(size.width.min.um.used.for.conversions = case_when(
+        is.na(size.width.min.um.used.for.conversions) & shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
+        is.na(size.width.min.um.used.for.conversions) & shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
+        is.na(size.width.min.um.used.for.conversions) & shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+        is.na(size.width.min.um.used.for.conversions) & shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
+        T ~ size.width.min.um.used.for.conversions
+        )) %>% 
+      ### Max depends on ingest/trans limits ###
+      # TRANS #
+      mutate(size.width.max.um.trans = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # INGEST #
+      mutate(size.width.max.um.ingest = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      # No bioavailability #
+      mutate(size.width.max.um.used.for.conversions = case_when(
+        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
+        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
+        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+      )) %>% 
+      
+      ###### ------ HEIGHT ----- ##### 
+    ## Monodisperse ##
+    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+    mutate(size.height.um.used.for.conversions = case_when(
+      is.na(size.height.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+      is.na(size.height.um.used.for.conversions) & shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio, # if not spherical, height = width * H:W ratio
+      T ~ size.height.um.used.for.conversions
+    )) %>% 
+      ### Polydisperse ##
+      ## Min is always same ##
+      mutate(size.height.min.um.used.for.conversions = case_when(
+        is.na(size.height.min.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
+        is.na(size.height.min.um.used.for.conversions) & shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio, # if not spherical, height = width * H:W ratio
+        T ~ size.height.min.um.used.for.conversions
+      )) %>%  # environment AND average height to width ratio (kooi et al 2021)
+      # trans #
+      mutate(size.height.max.um.trans = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # Ingest # 
+      mutate(size.height.max.um.ingest = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>% 
+      # No bioavailability #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+      
+      ############ ------ Volume ------ ##########
+    ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
+    #### Monodisperse ##
+    # calculate volume for monodisperse particles #
+    mutate(particle.volume.um3 = volumefnx(R = R.ave,
+                                           length = size.length.um.used.for.conversions, 
+                                           width = size.width.um.used.for.conversions,
+                                           height = size.height.um.used.for.conversions
+    )) %>% 
+      #### Polydisperse ##
+      mutate(particle.volume.um3.min = volumefnx(R = R.ave, 
+                                                 length = size.length.min.um.used.for.conversions,
+                                                 width = size.width.min.um.used.for.conversions, 
+                                                 height = size.height.min.um.used.for.conversions)) %>% 
+      ### Trans ##
+      # calculate min and max volume when polydisperse particles are used (being sure to use ingestion-restricted sizes)
+      # calculate max volume when polydisperse particles are used (translocation-limited)
+      mutate(particle.volume.um3.max.trans = volumefnx(R = R.ave,
+                                                       length = size.length.max.um.trans,
+                                                       width = size.width.max.um.trans, 
+                                                       height = size.height.max.um.trans)) %>%
+      ### Ingest  ##
+      # calculate max volume when polydisperse particles are used (ingestlocation-limited)
+      mutate(particle.volume.um3.max.ingest = volumefnx(R = R.ave,
+                                                        length = size.length.max.um.ingest,
+                                                        width = size.width.max.um.ingest, 
+                                                        height = size.height.max.um.ingest)) %>% 
+      ### No Filter ###
+      # calculate max volume when polydisperse particles are used (no bioavility fildter)
+      mutate(particle.volume.um3.max.none = volumefnx(R = R.ave,
+                                                        length = size.length.max.um.used.for.conversions,
+                                                        width = size.width.max.um.used.for.conversions, 
+                                                        height = size.height.max.um.used.for.conversions)) %>% 
+      ############ ------ Surface Area ------ ##########
+    # calculate surface are for monodisperse particles
+    mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
+                                             width = size.width.um.used.for.conversions,
+                                             height = size.height.um.used.for.conversions,
+                                             R = R.ave,
+                                             H_W_ratio = H_W_ratio)) %>% 
+      ##### Polydisperse ###
+      # calculate min/max SA for polydisperse mixtures (being sure to use translocation/ingestion-restricted polydisperse upper sizes)
+      mutate(particle.surface.area.um2.min = SAfnx(length = size.length.min.um.used.for.conversions,
+                                                   width = size.width.min.um.used.for.conversions,
+                                                   height = size.height.min.um.used.for.conversions,
+                                                   R = R.ave,
+                                                   H_W_ratio = H_W_ratio)) %>% 
+      ### Trans ## 
+      mutate(particle.surface.area.um2.max.trans = SAfnx(R = R.ave,
+                                                         H_W_ratio = H_W_ratio,
+                                                         length = size.length.max.um.trans,
+                                                         width = size.width.max.um.trans, 
+                                                         height = size.height.max.um.trans)) %>% 
+      ### Ingest ### 
+      mutate(particle.surface.area.um2.max.ingest = SAfnx(R = R.ave,
+                                                          H_W_ratio = H_W_ratio,
+                                                              length = size.length.max.um.ingest,
+                                                              width = size.width.max.um.ingest, 
+                                                              height = size.height.max.um.ingest)) %>% 
+      ### No bioavailbility filter ### 
+      mutate(particle.surface.area.um2.max.none = SAfnx(R = R.ave,
+                                                            H_W_ratio = H_W_ratio,
+                                                              length = size.length.max.um.used.for.conversions,
+                                                              width = size.width.max.um.used.for.conversions, 
+                                                              height = size.height.max.um.used.for.conversions)) %>% 
+      #calculate mass for monodisperse particles  
+      mutate(mass.per.particle.mg = massfnx(v = particle.volume.um3, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3    
+      #calculate minimum and maximum mass or polydisperse particles
+      mutate(mass.per.particle.mg.min = massfnx(v = particle.volume.um3.min, p = density.g.cm3) * 1e-3) %>% #equation uses g/cm3
+      # Trans
+      mutate(mass.per.particle.mg.max.trans = massfnx(v = particle.volume.um3.max.trans, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # Ingest
+      mutate(mass.per.particle.mg.max.ingest = massfnx(v = particle.volume.um3.max.ingest, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      # none
+      mutate(mass.per.particle.mg.max.none = massfnx(v = particle.volume.um3.max.none, p = density.g.cm3) * 1e-3) %>%   #equation uses g/cm3
+      
+      ###### Alignments #2 #####
+    # Particle ERM #
+    # calculate effect threshold for particles (depending on selection of ingestion/translocation switch)
+    mutate(
+      EC_mono_p.particles.mL = case_when(
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "ingestion" ~ dose.particles.mL.ingest,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "ingestion" ~ dose.particles.kg.ingest,
+        
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "translocation" ~ dose.particles.mL.trans,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "translocation" ~ dose.particles.kg.trans,
+        
+        dose_check %in% c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL") & ingestion.translocation.switch == "none" ~ dose.particles.mL.no_filter,
+        dose_check %in% c("Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment") & ingestion.translocation.switch == "none" ~ dose.particles.kg.no_filter
+      )
+    ) %>% 
+      #  ensure algae never considered for food dilution
+      mutate(EC_mono_p.particles.mL = case_when(
+        ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        T ~ EC_mono_p.particles.mL)) %>%
+      mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
+      mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
+      # polydisperse effect threshold for particles
+      mutate(EC_poly_p.particles.mL = (EC_mono_p.particles.mL * mu.p.mono)/mu.p.poly) %>% 
+  
+      ## Calculate environmentally relevant effect threshold for particles
+      mutate(EC_env_p.particles.mL = EC_poly_p.particles.mL * CF_bio) %>%  #aligned particle effect concentraiton (1-5000 um)
+      # Surface Area ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible surface area
+      mutate(x_LL_sa = SAfnx(length = x1D_set, 
+                             width = x1D_set, 
+                             height = x1D_set)) %>% #length-limited
+      #calculate upper ingestible surface area
+      mutate(x_UL_sa = SAfnx(length = x2M, #LENGTH-limited (less conservative assumption)
+                             width = x2M, #length-limited
+                             height = x2M)) %>%   #length-limited
+      #calculate mu_x_poly (env) for surface area
+      mutate(mu.sa.poly = mux_polyfnx(a.sa, x_UL_sa, x_LL_sa)) %>% 
+      
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.sa.mono = case_when(
+        polydispersity == "monodisperse" ~ particle.surface.area.um2, # use reported surface area in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                            x_LL = particle.surface.area.um2.min,
+                                                                                                            x_UL = particle.surface.area.um2.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                        x_LL = particle.surface.area.um2.min,
+                                                                                                        x_UL = particle.surface.area.um2.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.sa, 
+                                                                                                        x_LL = particle.surface.area.um2.min,
+                                                                                                        x_UL = particle.surface.area.um2.max.none)
+      )) %>% 
+    
+      #calculate polydisperse effect concentration for surface area (particles/mL)
+      mutate(EC_poly_sa.particles.mL = (EC_mono_p.particles.mL * mu.sa.mono)/mu.sa.poly) %>%  
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_sa.particles.mL = EC_poly_sa.particles.mL * CF_bio) %>% 
+      
+      # Volume ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible volume 
+      mutate(x_LL_v = volumefnx(length = x1D_set,
+                                width = x1D_set,
+                                height = x1D_set
+      )) %>% 
+      #calculate maximum ingestible volume 
+      mutate(x_UL_v = volumefnx(length = x2M, #length-limited
+                                width = x2M,
+                                height = x2M
+      )) %>% #length-limited
+      # calculate mu.v.poly
+      mutate(mu.v.poly = mux_polyfnx(a.v, x_UL_v, x_LL_v)) %>% 
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.v.mono = case_when(
+        polydispersity == "monodisperse" ~ particle.volume.um3, # use reported volume in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                            x_LL = particle.volume.um3.min,
+                                                                                                            x_UL = particle.volume.um3.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                        x_LL = particle.volume.um3.min,
+                                                                                                        x_UL = particle.volume.um3.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  mux_polyfnx(a.x = a.v, 
+                                                                                                        x_LL = particle.volume.um3.min,
+                                                                                                        x_UL = particle.volume.um3.max.none)
+      )) %>% 
+      #calculate polydisperse effect concentration for volume (particles/mL)
+      mutate(EC_poly_v.particles.mL = (EC_mono_p.particles.mL * mu.v.mono)/mu.v.poly) %>%  
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_v.particles.mL = EC_poly_v.particles.mL * CF_bio) %>% 
+ 
+      # Mass ERM #
+      ##--- environmental calculations ---###
+      #calculate lower ingestible mass
+      mutate(x_LL_m = massfnx(v = x_LL_v, p = p.ave)) %>% 
+      #calculate upper ingestible mass
+      mutate(x_UL_m = massfnx(v = x_UL_v, p = p.ave)) %>% #average density
+      # calculate mu.m.poly
+      mutate(mu.m.poly = mux_polyfnx(a.m, x_UL_m, x_LL_m)) %>% 
+      ##--- laboratory calculations ---###
+      ## define mu_x_mono OR mu_x_poly (lab) for alignment to ERM  #
+      #(note that if mixed particles were used, a different equation must be used)
+      mutate(mu.m.mono = case_when(
+        polydispersity == "monodisperse" ~  mass.per.particle.mg * 1000, # use reported volume in monodisperse
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "translocation" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.trans),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "ingestion" ~ 
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.ingest),
+        polydispersity == "polydisperse" & ingestion.translocation.switch == "none" ~  
+          mux_polyfnx(a.x = a.m, 
+                      x_LL = mass.per.particle.mg.min,
+                      x_UL = mass.per.particle.mg.max.none)
+        )) %>% 
+      #calculate polydisperse effect concentration for volume (particles/mL)
+      mutate(EC_poly_m.particles.mL = (EC_env_p.particles.mL * mu.m.mono)/mu.m.poly) %>%
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_m.particles.mL = EC_poly_m.particles.mL * CF_bio) %>% 
+      
+      # Specific Surface Area ERM #
+      mutate(mu.ssa.mono = mu.sa.mono/mu.m.mono) %>% #define mu_x_mono for alignment to ERM (um^2/ug)
+      #calculate lower ingestible 1/SSA
+      mutate(x_LL_ssa = SSA.inversefnx(sa = x_LL_sa, #surface area
+                                       m = x_LL_m) #mass
+      ) %>% 
+      #calculate upper ingestible SSA  (um^2/ug)
+      mutate(x_UL_ssa = SSA.inversefnx(sa = x_UL_sa, #surface area
+                                       m = x_UL_m) #mass
+      ) %>% 
+      #calculate mu_x_poly for specific surface area
+      #note that mu were calcaulted for polydisperse particles before, so not special case needed here
+      mutate(mu.ssa.inverse.poly = mux_polyfnx(a.ssa, x_UL_ssa, x_LL_ssa)) %>% 
+      #calculate polydisperse effect concentration for specific surface area (particles/mL)
+      mutate(mu.ssa.poly = 1 / mu.ssa.inverse.poly) %>%  #calculate mu_SSA from inverse
+      mutate(EC_poly_ssa.particles.mL = (EC_env_p.particles.mL * mu.ssa.mono)/mu.ssa.poly) %>% 
+      #calculate environmentally realistic effect threshold
+      mutate(EC_env_ssa.particles.mL = EC_poly_ssa.particles.mL * CF_bio) %>% 
+      
+      ### Convert to Metrics other than particles/mL ###
+      ## convert all environmentally realistic thresholds to surface area ##
+      # particle count to surface area #
+      mutate(EC_env_p.um2.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to surface area #
+      mutate(EC_env_sa.um2.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to surface area #
+      mutate(EC_env_v.um2.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to surface area #
+      mutate(EC_env_m.um2.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to surface area #
+      mutate(EC_env_ssa.um2.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.sa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to volume ##
+      # particle count to volume #
+      mutate(EC_env_p.um3.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to volume #
+      mutate(EC_env_sa.um3.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to volume #
+      mutate(EC_env_v.um3.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to volume #
+      mutate(EC_env_m.um3.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to volume #
+      mutate(EC_env_ssa.um3.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.v, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to mass ##
+      # particle count to mass #
+      mutate(EC_env_p.ug.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to mass #
+      mutate(EC_env_sa.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to mass #
+      mutate(EC_env_v.ug.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to mass #
+      mutate(EC_env_m.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to mass #
+      mutate(EC_env_ssa.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.m, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      ## convert all environmentally realistic thresholds to specific surface area ##
+      # particle count to specific surface area #
+      mutate(EC_env_p.um2.ug.mL =  EC_env_p.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # surface area to specific surface area #
+      mutate(EC_env_sa.um2.ug.mL =  EC_env_sa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # volume to specific surface area #
+      mutate(EC_env_v.um2.ug.mL =  EC_env_v.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>%
+      # mass to specific surface area #
+      mutate(EC_env_m.um2.ug.mL =  EC_env_m.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      # specific surface area to specific surface area #
+      mutate(EC_env_ssa.um2.ug.mL =  EC_env_ssa.particles.mL * mux_polyfnx(a.x = a.ssa, x_UL = x2D_set, x_LL = x1D_set)) %>% 
+      
+      #annotate aligned ERM of interest for user interpretability
+      mutate("Surface-Area Aligned Exposure Concentration (particles/mL)" = EC_env_sa.particles.mL,
+             "Volume Aligned Exposure Concentration (particles/mL)" = EC_env_v.particles.mL,
+             "Mass Aligned Exposure Concentration (particles/mL)" = EC_env_m.particles.mL,
+             "Specific Surface Area Aligned Exposure Concentration (particles/mL)" = EC_env_ssa.particles.mL) %>% 
+      #nudge to front
+      dplyr::relocate("Surface-Area Aligned Exposure Concentration (particles/mL)",
+                      "Volume Aligned Exposure Concentration (particles/mL)",
+                      "Mass Aligned Exposure Concentration (particles/mL)",
+                      "Specific Surface Area Aligned Exposure Concentration (particles/mL)") 
+  
+    #print
+    alignedData_calculator
+    
+  })
+  
+  #render calculated values in datatable
+  output$alignmentTable = DT::renderDataTable({
+    req(input$alignment_file)
+    
+    alignedData_calculator <- alignedData_calculator()
+    
+    datatable(alignedData_calculator %>% 
+                mutate_if(is.numeric, ~ signif(., 3)),
+    extensions = c('Buttons'),
+    style = "bootstrap",
+    options = list(
+      dom = 'Brtip',
+      buttons = list(I('colvis'), c('copy', 'csv', 'excel')),
+      scrollY = 400,
+      scrollH = TRUE,
+      sScrollX = TRUE,
+      columnDefs = list(list(width = '50px', targets = "_all"))),#only display the table and nothing else
+    caption = "Filtered Data") %>% 
+    formatStyle(
+      c("Surface-Area Aligned Exposure Concentration (particles/mL)", "Volume Aligned Exposure Concentration (particles/mL)", "Mass Aligned Exposure Concentration (particles/mL)", "Specific Surface Area Aligned Exposure Concentration (particles/mL)"),
+      backgroundColor = '#a9d6d6')
+    
+  })
+  
+  # test data based on 25% of training dataset
+  output$downloadData_calculator <- downloadHandler(
+    filename = function() {
+      paste('aligned_data-', '.csv', sep='')
+    },
+    content = function(file) {
+      write.csv(alignedData_calculator(), file, row.names = FALSE)
+    }
+  )
+  
+  ##### Predictions #####
+  
+  # test data based on 25% of training dataset
+  output$testData_prediction <- downloadHandler(
+    filename = function() {
+      paste('test_data-', '.csv', sep='')
+    },
+    content = function(file) {
+      write.csv(test_data_prediction, file, row.names = FALSE)
+    }
+  )
+  
+  # render DT of test data prediction
+  output$test_data_DT <- renderDT(server = TRUE,{
+    
+    datatable(test_data_prediction,
+              rownames = F,
+              extensions = 'Buttons', #enable buttons extension
+              filter = "top",
+              options = list(pageLength = 10, autoWidth = TRUE,  width = '100%', scrollX = TRUE,
+                             dom = 'Blrtip', 
+                             buttons = list(
+                               # insert buttons with copy and print
+                               # colvis includes the button to select and view only certain columns in the output table
+                               # from https://rstudio.github.io/DT/extensions.html 
+                               I('colvis'), 'copy', 'print',
+                               # code for the first dropdown download button. this will download only the current page only (depends on the number of rows selected in the lengthMenu)
+                               # using modifier = list(page = "current")
+                               # only the columns visible will be downloaded using the columns:":visible" option from:
+                               list(extend = 'collection', buttons = list(list(extend = "csv", filename = "page",exportOptions = list(
+                                 columns = ":visible",modifier = list(page = "current"))),
+                                 list(extend = 'excel', filename = "page", title = NULL, 
+                                      exportOptions = list(columns = ":visible",modifier = list(page = "current")))),
+                                 text = 'Download current page'),
+                               # code for the  second dropdown download button
+                               # this will download the entire dataset using modifier = list(page = "all")
+                               list(extend = 'collection',
+                                    buttons = list(list(extend = "csv", filename = "data",exportOptions = list(
+                                      columns = ":visible",modifier = list(page = "all"))),
+                                      list(extend = 'excel', filename = "data", title = NULL, 
+                                           exportOptions = list(columns = ":visible",modifier = list(page = "all")))),
+                                    text = 'Download all data')),
+                             # add the option to display more rows as a length menu
+                             lengthMenu = list(c(10, 30, 50, -1),
+                                               c('10', '30', '50', 'All'))),class = "display")
+  })
+  
+  # valid values
+  output$validValues_prediction <- downloadHandler(
+    filename = function() {
+      paste('validValues', '.csv', sep='')
+    },
+    content = function(file) {
+      write.csv(valid_values, file, row.names = FALSE)
+    }
+  )
+  
+  #### validate user-uploaded prediction data ###
+  validate_data <- eventReactive(input$prediction_file, {
+    req(input$prediction_file)
+    #read in user data
+    user_data <- readr::read_csv(input$prediction_file$datapath)
+    
+    # Initialize validation messages
+    messages <- list()
+    
+    # Define valid column names, data types, and valid values
+    required_columns <- data.frame(
+      Name = c("Organism Group", "Life Stage", "Species", 
+               "Estimated Maximum Ingestible Size (mm)", 
+               "Level of Biological Organization", "Exposure Route", 
+               "Environment", "Acute/Chronic", "Exposure Duration (days)", 
+               "translocatable", "Effect Score", "Effect Metric", 
+               "Broad Endpoint Category", "Specific Endpoint Category", 
+               "Empirical Tissue Translocation ERM Conc. (log 10 particles/mL; 1-5,000 um)", 
+               "Empirical Food Dilution ERM Conc. (log 10 particles/mL; 1-5,000 um)", 
+               "PA_fraction", "PE_fraction", "PET_fraction", "PLA_fraction", 
+               "PMMA_fraction", "PP_fraction", "PS_fraction", "PUR_fraction", 
+               "PVC_fraction", "fiber_fraction", "fragment_fraction", "sphere_fraction"),
+      Type = c("character", "character", "character", "numeric", 
+               "character", "character", "character", "character", 
+               "numeric", "character", "numeric", "character", 
+               "character", "character", "numeric", "numeric", 
+               "numeric", "numeric", "numeric", "numeric", 
+               "numeric", "numeric", "numeric", "numeric", 
+               "numeric", "numeric", "numeric", "numeric"),
+      Optional = c(FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, 
+                   FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, 
+                   TRUE, TRUE, FALSE, FALSE, FALSE, FALSE, FALSE, 
+                   FALSE, FALSE, FALSE, FALSE, FALSE, FALSE, FALSE)
+    )
+    
+    # 1. Check for missing column names
+    missing_columns <- setdiff(required_columns$Name, colnames(user_data))
+    if (length(missing_columns) > 0) {
+      messages <- c(messages, paste0("Missing columns: ", paste(missing_columns, collapse = ", ")))
+    }
+    
+    # 2. Check for incorrect data types
+    for (col in intersect(required_columns$Name, colnames(user_data))) {
+      expected_type <- required_columns$Type[required_columns$Name == col]
+      actual_type <- class(user_data[[col]])
+      
+      # Handle integer/numeric distinction
+      if (expected_type == "numeric" && actual_type == "integer") {
+        actual_type <- "numeric"
+      }
+      
+      if (expected_type != actual_type) {
+        messages <- c(messages, paste0("Column '", col, "' has incorrect type. Expected: ", expected_type, ", Found: ", actual_type))
+      }
+    }
+    
+    # 3. Validate character column values
+    for (col in intersect(required_columns$Name, colnames(user_data))) {
+      if (required_columns$Type[required_columns$Name == col] == "character") {
+        valid_levels <- valid_values$Level[valid_values$VarName == col]
+        invalid_values <- setdiff(unique(user_data[[col]]), valid_levels)
+        if (length(invalid_values) > 0) {
+          messages <- c(messages, paste0("Column '", col, "' contains invalid values: ", paste(invalid_values, collapse = ", ")))
+        }
+      }
+    }
+    
+    # 4. Check numeric columns with range constraints (0 to 1)
+    range_columns <- c("PA_fraction", "PE_fraction", "PET_fraction", "PLA_fraction", 
+                       "PMMA_fraction", "PP_fraction", "PS_fraction", "PUR_fraction", 
+                       "PVC_fraction", "fiber_fraction", "fragment_fraction", "sphere_fraction")
+    for (col in intersect(range_columns, colnames(user_data))) {
+      if (any(user_data[[col]] < 0 | user_data[[col]] > 1, na.rm = TRUE)) {
+        messages <- c(messages, paste0("Column '", col, "' contains values outside the range 0 to 1."))
+      }
+    }
+    
+    # Return validation messages
+    if (length(messages) == 0) {
+      return(list(success = TRUE, message = "All checks passed!"))
+    } else {
+      return(list(success = FALSE, message = messages))
+    }
+  })
+  
+  # Display validation results
+  output$validation_results <- renderUI({
+    validation <- validate_data()
+    if (is.null(validation)) return(NULL)
+    
+    if (validation$success) {
+      tags$div(style = "color: green; font-size: 1.5em; font-weight: bold;", validation$message)
+    } else {
+      tags$div(style = "color: red;", lapply(validation$message, tags$p))
+    }
+  })
+  
+  # render DT of test data prediction
+  output$user_prediction_DT <- renderDT(server = TRUE,{
+    
+    req(input$prediction_file)
+    
+    #read in user data
+    user_data <- readr::read_csv(input$prediction_file$datapath)
+    
+    datatable(user_data,
+              rownames = F,
+              extensions = 'Buttons', #enable buttons extension
+              filter = "top",
+              options = list(pageLength = 25, autoWidth = TRUE,  width = '100%', scrollX = TRUE,
+                             dom = 'Blrtip', 
+                             buttons = list(
+                               # insert buttons with copy and print
+                               # colvis includes the button to select and view only certain columns in the output table
+                               # from https://rstudio.github.io/DT/extensions.html 
+                               I('colvis'), 'copy', 'print',
+                               # code for the first dropdown download button. this will download only the current page only (depends on the number of rows selected in the lengthMenu)
+                               # using modifier = list(page = "current")
+                               # only the columns visible will be downloaded using the columns:":visible" option from:
+                               list(extend = 'collection', buttons = list(list(extend = "csv", filename = "page",exportOptions = list(
+                                 columns = ":visible",modifier = list(page = "current"))),
+                                 list(extend = 'excel', filename = "page", title = NULL, 
+                                      exportOptions = list(columns = ":visible",modifier = list(page = "current")))),
+                                 text = 'Download current page'),
+                               # code for the  second dropdown download button
+                               # this will download the entire dataset using modifier = list(page = "all")
+                               list(extend = 'collection',
+                                    buttons = list(list(extend = "csv", filename = "data",exportOptions = list(
+                                      columns = ":visible",modifier = list(page = "all"))),
+                                      list(extend = 'excel', filename = "data", title = NULL, 
+                                           exportOptions = list(columns = ":visible",modifier = list(page = "all")))),
+                                    text = 'Download all data')),
+                             # add the option to display more rows as a length menu
+                             lengthMenu = list(c(10, 30, 50, -1),
+                                               c('10', '30', '50', 'All'))),class = "display")
+  })
+  
+  # Combine user data with training data
+  combined_data <- reactive({
+    req(input$prediction_file)
+    #read in user data
+    user_data <- readr::read_csv(input$prediction_file$datapath)
+    
+    test <- user_data %>% mutate(train_test = "test")
+    train <- train_data_prediction %>% mutate(train_test = "train")
+    combined_data <- bind_rows(test, train)
+    combined_data
+  })
+  
+  preprocess_data <- reactive({
+    req(combined_data())
+    combined_data <- combined_data()
+    
+    # Separate numeric and character columns
+    numeric_data <- combined_data %>% select(where(is.numeric))
+    char_data <- combined_data %>% select(where(is.character))
+    
+    # One-hot encode character columns
+    if (ncol(char_data) > 0) {
+      dummies <- dummyVars("~ .", data = char_data)
+      char_encoded <- as.data.frame(predict(dummies, newdata = char_data))
+    } else {
+      char_encoded <- NULL
+    }
+    
+    # Combine numeric and one-hot encoded combined_data
+    processed_data <- bind_cols(numeric_data, char_encoded)
+    processed_data$train_test <- combined_data$train_test
+    processed_data
+  })
+  
+  # Render UMAP plot
+  output$umapPlot <- renderPlot({
+    req(preprocess_data())
+    
+    # Preprocessed data
+    processed_data <- preprocess_data()
+    numeric_data <- processed_data %>% select(-train_test) %>% na.omit() # Remove train_test for UMAP
+    
+    # Run UMAP
+    # Run UMAP with adjusted parameters
+    umap_result <- umap(
+      numeric_data,
+      n_neighbors = 120, # Capture more global structure
+      min_dist = 0.0,   # Pack points densely
+      n_components = 2 # Reduce to 2D for visualizatio
+    )
+    
+    # Add UMAP results back to the data
+    umap_df <- as.data.frame(umap_result)
+    colnames(umap_df) <- c("UMAP1", "UMAP2")
+    umap_df$train_test <- processed_data$train_test[!is.na(rowSums(numeric_data))]
+    
+    # Plot UMAP results
+    ggplot(umap_df, aes(x = UMAP1, y = UMAP2, color = train_test)) +
+      geom_point(alpha = 0.12, size = 2) +
+      labs(title = "UMAP Visualization of Training and Test Data",
+           x = "UMAP Dimension 1", y = "UMAP Dimension 2") +
+      theme_minimal(base_size = 15) +
+      theme(legend.position = "top")
+  })
+  
+  #skim user-input dataset
+  output$predictionDataSkim <- renderPlot({
+    req(input$prediction_file)
+    #read in user data
+    test <- readr::read_csv(input$prediction_file$datapath) %>% 
+      mutate(train_test = "test")
+    #read in training data
+    train <- train_data_prediction %>% 
+      mutate(train_test = "train")
+    #merge user data with training data
+    df <- rbind(test, train)
+    
+    #plot histograms with overlapping data by color
+    df %>% 
+   dplyr::select(c(where(is.numeric), "train_test")) %>%                     # Keep only numeric columns
+      gather(key = "attribue", value = "value", # Convert to key-value pairs
+             -train_test) %>%                             #keep train_test variable
+      ggplot(aes(x = value, fill = train_test, color = train_test)) +         # Plot the values
+      facet_wrap(~ attribue, scales = "free") +   # In separate panels
+     geom_density(alpha = 0.3, kernel = "rectangular") +
+      scale_fill_discrete(name = "Training or Test Data") +# as density
+      scale_color_discrete(name = "Training or Test Data") +# as density
+      ylab("Relative Proportion") +
+      xlab("Variable") +
+      theme_minimal(base_size = 15) +
+      theme(legend.position = "top")
+  })
+  
+  # Create downloadable png for skimr
+  output$download_predictionDataSkim <- downloadHandler(
+    filename = function() {
+      paste('Train_vs_Test_Histograms', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      ggsave(file, plot = predictionDataSkim(), width = 16, height = 8, device = 'png')
+    })
+  
+  # make predictions based on user-uploaded dataste
+  prediction_reactiveDF<-eventReactive(list(input$go_predict),{
+    req(input$prediction_file)
+    req(input$go_predict)
+    
+    #choose model based on user-selected ERM
+    if(input$ERM_radio == "tissue translocation"){
+      model = predictionModel_tissue.translocation
+    }
+    
+    if(input$ERM_radio == "food dilution"){
+    model = predictionModel_food.dilution}
+    
+    #define dataframe based on user upload
+    df <- readr::read_csv(input$prediction_file$datapath) #needs to be read_csv to keep names formatted
+    
+    df$predictions <- caret::predict.train(model, newdata = df, na.action = na.omit)
+    
+    prediction_reactiveDF <- df %>%
+     # dplyr::select(-X) %>% 
+      mutate(predictions.linear = 10 ^ predictions) %>% 
+      dplyr::relocate(predictions, predictions.linear) %>% 
+      rename("Predicted Conc. (particles/mL; 1-5,000 um)" = predictions.linear,
+             "Predicted Conc. (log10 particles/mL; 1-5,000 um)" = predictions#,
+             #"Empirical Tissue Translocation ERM Conc. (log 10 particles/mL; 1-5,000 um)" = log10.particles.mL.ox.stress.known,
+             #"Empirical Food Dilution ERM Conc. (log 10 particles/mL; 1-5,000 um)" = log10.particles.mL.food.dilution.known
+             )
+    
+    return(prediction_reactiveDF)
+  })
+  
+  #render predictions in datatable
+  output$predictionsTable = DT::renderDataTable({
+    req(input$prediction_file)
+    
+    prediction_reactiveDF <- prediction_reactiveDF()
+    
+    prediction_reactiveDF %>% 
+      mutate_if(is.numeric, ~ signif(., 3)) %>% 
+      mutate_if(is.character, ~as.factor(.)) %>% 
+      datatable(rownames = F,
+                extensions = 'Buttons', #enable buttons extension
+                filter = "top",
+                options = list(pageLength = 25, autoWidth = TRUE,  width = '100%', scrollX = TRUE,
+                               dom = 'Blrtip', 
+                               buttons = list(
+                                 # insert buttons with copy and print
+                                 # colvis includes the button to select and view only certain columns in the output table
+                                 # from https://rstudio.github.io/DT/extensions.html 
+                                 I('colvis'), 'copy', 'print',
+                                 # code for the first dropdown download button. this will download only the current page only (depends on the number of rows selected in the lengthMenu)
+                                 # using modifier = list(page = "current")
+                                 # only the columns visible will be downloaded using the columns:":visible" option from:
+                                 list(extend = 'collection', buttons = list(list(extend = "csv", filename = "page",exportOptions = list(
+                                   columns = ":visible",modifier = list(page = "current"))),
+                                   list(extend = 'excel', filename = "page", title = NULL, 
+                                        exportOptions = list(columns = ":visible",modifier = list(page = "current")))),
+                                   text = 'Download current page'),
+                                 # code for the  second dropdown download button
+                                 # this will download the entire dataset using modifier = list(page = "all")
+                                 list(extend = 'collection',
+                                      buttons = list(list(extend = "csv", filename = "data",exportOptions = list(
+                                        columns = ":visible",modifier = list(page = "all"))),
+                                        list(extend = 'excel', filename = "data", title = NULL, 
+                                             exportOptions = list(columns = ":visible",modifier = list(page = "all")))),
+                                      text = 'Download all data'))),
+                caption = "Filtered Data") %>% 
+      formatStyle(
+        c("Predicted Conc. (particles/mL; 1-5,000 um)", "Predicted Conc. (log10 particles/mL; 1-5,000 um)"),
+        backgroundColor = '#a9d6d6')
+    
+    })
+  
+  # Downloadable csv of selected dataset ----
+  output$downloadData_prediction <- downloadHandler(
+    filename = function() {
+      paste("data-", Sys.Date(), ".csv", sep="")
+    },
+    content = function(file) {
+      write.csv(prediction_reactiveDF(), file, row.names = FALSE)
+    }
+  )
+  
+  #render scatterplot comparing predicted and known concentrations
+  
+  output$predictionsScatter <- renderPlot({
+    
+     req(input$ERM_radio, input$prediction_var)
+      
+      prediction_var <- input$prediction_var
+      
+      prediction_reactiveDF <- prediction_reactiveDF()
+      
+      # Choose known concentrations based on ERM
+      if (input$ERM_radio == "tissue translocation") {
+        scatter_data <- prediction_reactiveDF %>%
+          mutate(
+            x = `Empirical Tissue Translocation ERM Conc. (log 10 particles/mL; 1-5,000 um)`,
+            y = `Predicted Conc. (log10 particles/mL; 1-5,000 um)`
+          )
+      } else if (input$ERM_radio == "food dilution") {
+        scatter_data <- prediction_reactiveDF() %>%
+          mutate(
+            x = `Empirical Food Dilution ERM Conc. (log 10 particles/mL; 1-5,000 um)`,
+            y = `Predicted Conc. (log10 particles/mL; 1-5,000 um)`
+          )
+      }
+      
+      # Calculate regression metrics
+      lm_model <- lm(y ~ x, data = scatter_data)
+      r_squared <- summary(lm_model)$r.squared
+      equation <- paste0("y = ", round(coef(lm_model)[2], 1), "x + ", round(coef(lm_model)[1], 1))
+      predictions <- predict(lm_model, scatter_data)
+      rmse <- round(sqrt(mean((scatter_data$y - predictions)^2)),2)
+      mae <- round(mean(abs(scatter_data$y - predictions)),3)
+      
+      # Add layers to plot
+      scatterPlot <- scatter_data %>%
+        ggplot(aes(x = x, y = y
+                   )) +
+        geom_point(alpha = 0.4,
+                   aes_string(color = prediction_var)) +
+        geom_smooth(method = "lm", se = TRUE, color = "red", formula = y ~ x) +
+        geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "black", size = 1) + # 1:1 line
+        geom_abline(slope = 1, intercept = 1, linetype = "dotted", color = "blue", size = 1) + # 3x line
+        geom_abline(slope = 1, intercept = -1, linetype = "dotted", color = "blue", size = 1) + # 1/3x line
+        annotate("text", x = -1, y = max(scatter_data$y) * 0.85,
+                 label = paste0("R² = ", round(r_squared, 3)), color = "darkred", size = 5, hjust = 0) +
+        annotate("text", x = -1, y = max(scatter_data$y) * 0.7,
+                 label = paste0(equation), color = "darkred", size = 5, hjust = 0) +
+        annotate("text", x = -1, y = max(scatter_data$y) * 0.55,
+                 label = paste0("RMSE = ", round(rmse, 3)), color = "darkred", size = 5, hjust = 0) +
+        annotate("text", x = -1, y = max(scatter_data$y) * 0.4,
+                 label = paste0("MAE = ", round(mae, 3)), color = "darkred", size = 5, hjust = 0) +
+        xlab(label_wrap(40)("Known Effect Concentration (log10[Particles/mL; 1 to 5,000 um])")) +
+        ylab(label_wrap(40)("Predicted Effect Concentrations (log10[Particles/mL; 1 to 5,000 um])")) +
+        theme_minimal(base_size = 15) +
+        theme(legend.position = "bottom")
+      
+      print(scatterPlot) 
+   
+  })
+  
+  # Create downloadable png for scatterplot
+  output$downloadScatter_predictions <- downloadHandler(
+        filename = function() {
+      paste('Predicted vs. Observed Scatter', Sys.Date(), '.png', sep='')
+    },
+    content = function(file) {
+      ggsave(file, plot = predictionsScatter(), width = 16, height = 8, device = 'png')
+    })
+  
+  # Create "reset" button to revert all filters back to what they began as.
+  # Need to call all widgets individually by their ids.
+  # See https://stackoverflow.com/questions/44779775/reset-inputs-with-reactive-app-in-shiny for more information.
+  observeEvent(input$reset_ssd, {
+    shinyjs::reset("exp_type_check_ssd")
+    shinyjs::reset("lvl1_check_ssd")
+    shinyjs::reset("lvl2_check_ssd")
+    shinyjs::reset("poly_check_ssd")
+    shinyjs::reset("Group_check_ssd")
+    shinyjs::reset("shape_check_ssd")
+    shinyjs::reset("env_check_ssd")
+    shinyjs::reset("effect_check_ssd")
+    shinyjs::reset("size_check_ssd")
+    shinyjs::reset("life_check_ssd")
+    shinyjs::reset("bio_check_ssd")
+    shinyjs::reset("Species_check_ssd")
+    shinyjs::reset("tech_tier_zero_check_ssd")
+    shinyjs::reset("risk_tier_zero_check_ssd")
+    shinyjs::reset("Reported_Converted_rad")
+    shinyjs::reset("dose_check_ssd")
+    shinyjs::reset("ERM_check_ssd")
+    shinyjs::reset("alpha.value.matrix_ssd")
+    shinyjs::reset("alpha.value.matrix_calculator")
+    shinyjs::reset("alpha_ssd")
+    shinyjs::reset("a.sa_ssd")
+    shinyjs::reset("a.v_ssd")
+    shinyjs::reset("a.m_ssd")
+    shinyjs::reset("a.ssa_ssd")
+    shinyjs::reset("R.ave_ssd")
+    shinyjs::reset("p.ave_ssd")
+    shinyjs::reset("lower_length_ssd")
+    shinyjs::reset("upper_length_ssd")
+    shinyjs::reset("acute.chronic_check_ssd")
+    shinyjs::reset("ingestion.translocation.switch_ssd")
+    shinyjs::reset("upper.tissue.trans.size.um_ssd")
+    shinyjs::reset("effect.metric_rad_ssd")
+    shinyjs::reset("AF.time_rad_ssd")
+    shinyjs::reset("AF.noec_rad_ssd")
+    shinyjs::reset("conc.select.rad")
+
+  }) #If we add more widgets, make sure they get added here. 
+  
+  
+  } #Server end
+
+#### Full App ####
+shinyApp(ui = ui, server = server)
+
+
+# End of R Shiny app script.
