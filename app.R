@@ -2977,9 +2977,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ingestion.translocation.switch == "none" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.no_filter,
       ingestion.translocation.switch == "none" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.no_filter
     )) %>%
-      #  ensure algae never considered for food dilution
+      #  ensure algae and plant never considered for food dilution
       mutate(EC_mono_p.particles.mL = case_when(
         ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        ingestion.translocation.switch == "ingestion" & Group == "Plant" ~ NA,
         T ~ EC_mono_p.particles.mL)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
@@ -5227,9 +5228,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ingestion.translocation.switch == "none" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.no_filter,
       ingestion.translocation.switch == "none" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.no_filter
     )) %>%
-      #  ensure algae never considered for food dilution
+      #  ensure algae and plant never considered for food dilution
       mutate(EC_mono_p.particles.mL = case_when(
         ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        ingestion.translocation.switch == "ingestion" & Group == "Plant" ~ NA,
         T ~ EC_mono_p.particles.mL)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
@@ -6709,6 +6711,7 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
        #  ensure algae never considered for food dilution
       mutate(EC_mono_p.particles.mL = case_when(
         ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        ingestion.translocation.switch == "ingestion" & Group == "Plant" ~ NA,
         T ~ EC_mono_p.particles.mL)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
@@ -9513,9 +9516,10 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       ingestion.translocation.switch == "none" & dose_check == "µm2/kg sediment" ~ dose.particles.kg.no_filter,
       ingestion.translocation.switch == "none" & dose_check == "µm2/µg/kg sediment" ~ dose.particles.kg.no_filter
     )) %>%
-      #  ensure algae never considered for food dilution
+      #  ensure algae and plants are never considered for food dilution
       mutate(EC_mono_p.particles.mL = case_when(
         ingestion.translocation.switch == "ingestion" & Group == "Algae" ~ NA,
+        ingestion.translocation.switch == "ingestion" & Group == "Plant" ~ NA,
         T ~ EC_mono_p.particles.mL)) %>%
       mutate(mu.p.mono = 1) %>% #mu_x_mono is always 1 for particles to particles
       mutate(mu.p.poly = mux_polyfnx(a.x = alpha, x_UL= x2M, x_LL = x1M_set)) %>% 
