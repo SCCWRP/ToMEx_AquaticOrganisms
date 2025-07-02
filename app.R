@@ -175,13 +175,23 @@ ui <- dashboardPage(
                     p("The database and application tools have been created for use by the participants of the ", a(href = "https://www.sccwrp.org/about/
                       research-areas/additional-research-areas/
                       trash-pollution/microplastics-health-effects-webinar-series/", 'Microplastics Health Effects Workshop', 
-                      .noWS = "outside"),".The purpose of this workshop is to identify the most sensitive and biologically critical endpoints associated with microplastics exposure, 
+                      .noWS = "outside"),".The purpose of this workshop was to identify the most sensitive and biologically critical endpoints associated with microplastics exposure, 
                       prioritize which microplastics characteristics (e.g., size, shape, polymer) that are of greatest biological concern, and identify 
                       critical thresholds for each at which those biological effects become pronounced. Workshop participants will also make reccomendations for future
-                      research investments. Workshop findings will be published in a special issue of ", a(href ="https://microplastics.springeropen.com/", 'Microplastics and Nanoplastics', .noOWs = "outside"),". 
-                      These findings will be used directly by the state of California to fulfill ", a(href = "https://www.sccwrp.org/about/research-areas/
-                      additional-research-areas/trash-pollution/microplastics-health-effects-webinar-series/history-california-microplastics-legislation/", 'legislative mandates', 
-                      .noWS = "outside")," regarding the management of microplastics in drinking water and the aquatic environment.")),
+                      research investments. Workshop findings were published in a special issue of ", a(href ="https://microplastics.springeropen.com/", 'Microplastics and Nanoplastics', .noOWs = "outside")
+                    ),
+                
+                  h4("How has ToMEx data been used by the State of California?", align = "center"),
+                  
+                    p("The findings from the workshop (and ToMEx data) were used directly by the state of California to fulfill ", a(href = "https://www.sccwrp.org/about/research-areas/
+                        additional-research-areas/trash-pollution/microplastics-health-effects-webinar-series/history-california-microplastics-legislation/", 'legislative mandates', 
+                      .noWS = "outside")," regarding the management of microplastics in drinking water and the aquatic environment. For instance, ToMEx data were used to ", a(href = "https://www.waterboards.ca.gov/water_issues/programs/tmdl/2023_2024state_ir_reports/2024-integrated-report-final-staff-report.pdf", 
+                      "characterize risk in San Francisco Bay waterbodies", .noOWs = "outside"), "by the State Water Resources Control Board, which", a(href = "https://www.epa.gov/system/files/documents/2024-12/ca-2024-303d-list-epa-partial-approval-disapproval-2024-12-12.pdf", "led to the listing of several waterbodies", .noOWs = "outside"), 
+                      "as being 'potentially impaired' under the Clean Water Act (i.e., 305(b) listing). Findings from the workshop were also used to inform the State Water Resources Control Board's", a(href = "https://www.waterboards.ca.gov/drinking_water/certlic/drinkingwater/docs/2022/mp-hndbk.pdf", "drinking water monitoring program for microplastics,"), 
+                      "including determining the target sampling volume necessary to characterize potentially toxicologically-relevant levels of microplastics; and to develop health-based messaging
+                       information for consumers."
+                    ),
+                    ),  #close box
                    
                     #bottom right box  
                     box(status = "primary", width = 12,
