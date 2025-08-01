@@ -42,7 +42,6 @@ library(umap) # For UMAP
 library(uwot) # Alternative UMAP implementation
 library(shinycssloaders) #shows spinner when loading
 
-
 # ensure correct version of ssdtools is installed
 #install.packages("https://cran.r-project.org/src/contrib/Archive/ssdtools/ssdtools_0.3.7.tar.gz", repos=NULL, type="source")
 
@@ -8211,20 +8210,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
   
   # Create downloadable png of ssd plot
   output$downloadSsdPlot <- downloadHandler(
-    
     filename = function() {
-      paste('SSD_plot', Sys.Date(), '.png', sep='')
+      paste('aoc_ssd_plot', Sys.Date(), '.html', sep = '')
     },
     content = function(file) {
-      # #define user inputs
-      # width <- isolate(input$user_width)
-      # height <- isolate(input$user_height)
-      device <- function(..., width, height) {
-        grDevices::png(..., width = 10, height = 8, res = 250, units = "in")
-      }
-      ggsave(file, plot = ssd_ggplot(), device = device)
-    })
-  
+      htmlwidgets::saveWidget(ssd_plotly(), file)
+    }
+  )
   
   #### SSD Plotly ####
   ssd_plotly <- reactive({
@@ -8329,9 +8321,16 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         title = list(
           text = paste0(
             "Microplastics Species Sensitivity Distribution",
-            "<br><span style='font-size:14px'>(ERM = ", ERM_check_ssd, ")</span>"
-          )
-        ),
+            "<br><span style='font-size:14px'>(ERM = ", ERM_check_ssd, ")</span>"),
+            x = 0.5,
+            xanchor = "center"
+          ),
+          margin = list(t = 110),  # Increased margin
+          yaxis = list(
+            title = "Species Affected (%)",
+            range = c(0, 1.05),    # ← Give room for top markers
+            tickformat = ".0%"
+          ),
         xaxis = list(
           type  = "log",
          # tickformat    = ".0e",  # Forces scientific notation with 2 decimal places
