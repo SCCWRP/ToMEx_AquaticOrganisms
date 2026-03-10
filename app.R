@@ -766,7 +766,8 @@ tabItem(tabName = "Exploration",
                               radioButtons(inputId = "dose_check", 
                               label = "Dose Metric:",
                               choices = c("Particles/mL", "µg/mL", "µm3/mL", "µm2/mL", "µm2/µg/mL", 
-                                          "Particles/kg sediment (dry weight)", "mg/kg sediment (dry weight)", "µm3/kg sediment (dry weight)", "µm2/kg sediment (dry weight)", "µm2/µg/kg sediment (dry weight)"),
+                                          "Particles/kg sediment", "mg/kg sediment", "µm3/kg sediment", "µm2/kg sediment", "µm2/µg/kg sediment"),
+                                          # "Particles/kg sediment (dry weight)", "mg/kg sediment (dry weight)", "µm3/kg sediment (dry weight)", "µm2/kg sediment (dry weight)", "µm2/µg/kg sediment (dry weight)"),
                               selected = "µg/mL")),
 
                       
