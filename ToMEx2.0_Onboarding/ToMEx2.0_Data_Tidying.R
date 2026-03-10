@@ -349,11 +349,11 @@ rename_with(~ gsub(" |[?]|[(]|[)]|-|/|\\^", ".",.x), everything()) %>% ### repla
     relocate(dose.mg.L.measured, .after = dose.particles.mL.measured) %>% 
   #Mass - Nominal (sediment)
   mutate(nominal.dose.mg.kg.sediment = case_when(
-    exposure.route == "sediment" & `nominal.dose...alternative.type.units` == "g/kg sediment" ~ `nominal.dose...alternative.type`/1000,
+    exposure.route == "sediment" & `nominal.dose...alternative.type.units` == "g/kg sediment" ~ `nominal.dose...alternative.type`*1000,
     exposure.route == "sediment" & `nominal.dose...alternative.type.units` == "mg/kg sediment" ~ `nominal.dose...alternative.type`,
     exposure.route == "sediment" & `nominal.dose...alternative.type.units` == "mg/kg sediment dry weight" ~ `nominal.dose...alternative.type`,
     exposure.route == "sediment" & `nominal.dose...alternative.type.units` == "mg/kg" ~ `nominal.dose...alternative.type`,
-    exposure.route == "sediment" & `nominal.dose...alternative.type.units` == "g/kg (dw) sediment" ~ `nominal.dose...alternative.type`/1000,
+    exposure.route == "sediment" & `nominal.dose...alternative.type.units` == "g/kg (dw) sediment" ~ `nominal.dose...alternative.type`*1000,
     exposure.route == "sediment" & `nominal.dose...alternative.type.units` == "mg/Kg sediment" ~ `nominal.dose...alternative.type`,
   )) %>%
   mutate(`nominal.dose...alternative.type.units` = ifelse(!is.na(nominal.dose.mg.kg.sediment), NA_real_, `nominal.dose...alternative.type.units`)) %>% #Clear alternative dose column
