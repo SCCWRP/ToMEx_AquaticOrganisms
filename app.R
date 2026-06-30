@@ -88,7 +88,7 @@ synthetic_data_builder <- function(count){
 
 ui <- dashboardPage(
 
-  dashboardHeader(title = "Toxicity of Microplastics Explorer 2.0", titleWidth = 400),
+  dashboardHeader(title = "Toxicity of Microplastics Explorer v2.0.1", titleWidth = 400),
 
   dashboardSidebar(width = 175,
                    
@@ -131,7 +131,7 @@ ui <- dashboardPage(
       tabItem(tabName = "Welcome",
                
               #Header     
-              h1("Welcome to the Toxicity of Microplastics Explorer 2.0,",br(),"Aquatic Organisms Database!", align = 'center'),
+              h1("Welcome to the Toxicity of Microplastics Explorer v2.0.1,",br(),"Aquatic Organisms Database!", align = 'center'),
               br(),
               
               
@@ -149,7 +149,7 @@ ui <- dashboardPage(
                     
                     p("To access previous versions of the ToMEx database and web application, ", a(href = "https://github.com/SCCWRP/aq_mp_tox_shiny", 'click here.')),
                     
-                    strong(p("Disclaimer: ToMEx is an evolving, community-built tool. The manuscript describing ToMEx 2.0 is currently under peer review. When using ToMEx 2.0, it is highly recommended that underlying data and code are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
+                    strong(p("Disclaimer: ToMEx is an evolving, community-built tool. When using ToMEx 2.0, it is highly recommended that underlying data and code are carefully scrutinized before finalizing analyses or drawing major conclusions.")),
                     
                     h3("What is the Microplastics Toxicity Database?", align = "center"), 
                     
@@ -164,7 +164,10 @@ ui <- dashboardPage(
                     p("A full length description of the ToMEx 1.0 database and web application is published in ", 
                       a(href = "https://www.springeropen.com/collections/sccwrp", 'Microplastics and Nanoplastics'),
                       ". To access the open access manuscript, ", a(href = "https://microplastics.springeropen.com/articles/10.1186/s43591-022-00032-4", 'click here'),"."),
-                    
+
+                    p("A full length description of the ToMEx 2.0 database update is published in Microplastics and Nanoplastics", 
+                        ". To access the open access manuscript, ", a(href = "https://link.springer.com/article/10.1186/s43591-025-00145-6", 'click here'),"."),
+
                     p("Use the side panel on the left of the page to navigate to each section. Each section provides different information or data visualization options. 
                       More specific instructions may be found within each section.")))),
               
@@ -181,7 +184,7 @@ ui <- dashboardPage(
                       research investments. Workshop findings were published in a special issue of ", a(href ="https://microplastics.springeropen.com/", 'Microplastics and Nanoplastics', .noOWs = "outside")
                     ),
                 
-                  h4("How has ToMEx data been used by the State of California?", align = "center"),
+                  h3("How has ToMEx data been used by the State of California?", align = "center"),
                   
                     p("The findings from the workshop (and ToMEx data) were used directly by the state of California to fulfill ", a(href = "https://www.sccwrp.org/about/research-areas/
                         additional-research-areas/trash-pollution/microplastics-health-effects-webinar-series/history-california-microplastics-legislation/", 'legislative mandates', 
@@ -1977,12 +1980,18 @@ tabItem(tabName = "Issue",
 tabItem(tabName = "Citation", 
         
         box(title = "Citation", width = 12, status = "primary",
-            p("Suggested citation:"),
+            p("Suggested citation for web application:"),
             br(),
             p(paste0("Thornton Hampton, L.M., Wyler, D.B., Carney Almroth, B., Coffin, S., Cowger, W., Doyle, D., ... Mehinto, A.C. (2025). ",
-                     "Toxicity of Microplastics Explorer (Version 2.0) [Shiny application]. ",
+                     "Toxicity of Microplastics Explorer (Version 2.0.1) [Shiny application]. ",
                      "https://sccwrp.shinyapps.io/aq_mp_tox_shiny/. Accessed ", 
-                     format(Sys.Date(), "%B %d, %Y"), "."))
+                     format(Sys.Date(), "%B %d, %Y"), ".")),
+            br(),
+            p("Peer-reviewed manuscript citations:"),
+            br(),
+            p("Hampton, L.M.T., Wyler, D.B., Almroth, B.C. et al. The Toxicity of Microplastics Explorer (ToMEx) 2.0. Micropl.&Nanopl. 5, 38 (2025). https://doi.org/10.1186/s43591-025-00145-6."),
+            br(),
+            p("Thornton Hampton, L.M., Lowman, H., Coffin, S. et al. A living tool for the continued exploration of microplastic toxicity. Micropl.&Nanopl. 2, 13 (2022). https://doi.org/10.1186/s43591-022-00032-4.")
                                     ),
         
 ) #closes tab
