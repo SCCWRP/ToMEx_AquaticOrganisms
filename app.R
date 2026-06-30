@@ -25,7 +25,7 @@ library(DT) #Build HTML data tables
 library(plotly) #Make plots interactive
 library(viridis) #Colors
 library(shinyjs) #Exploration tab - reset button
-library(tigerstats) #turns things into percents
+#library(tigerstats) #turns things into percents
 library(ggbeeswarm) #plot all points
 library(plotly)
 library(ggdark) #dark mode ggplot
