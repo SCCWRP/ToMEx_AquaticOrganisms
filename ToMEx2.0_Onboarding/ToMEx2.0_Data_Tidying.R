@@ -825,7 +825,8 @@ bodysize_summary <- readRDS("aoc_setup.RDS") %>%
   distinct(species_f, life_f, body.length.cm, body.size.source) %>%   
   #remove values that are updated in the gape_size.csv
   filter(!species_f %in% c("Carassius auratus", "Hediste diversicolor", "Lumbriculus variegatus", "Tubifex NA", 
-                           "Ostrea edulis", "Oryzias latipes", "Potamopyrgus antipodarum", "Sparus aurata"))
+                           "Ostrea edulis", "Oryzias latipes", "Potamopyrgus antipodarum", "Sparus aurata")) %>%
+  filter(!(species_f == "Oryzias melastigma" & body.length.cm %in% c(2.1, 2.2)))
 
 #Grab table of additional body size data to add to database
 bodysize_addons <- read_csv("gape_size.csv") %>% 
