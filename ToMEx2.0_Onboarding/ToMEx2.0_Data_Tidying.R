@@ -16,6 +16,45 @@ R.ave.water.freshwater <- 0.67
 R.ave.sediment.marine <- 0.75
 R.ave.sediment.freshwater <- 0.70
 
+#### Optional test-material fields (docs/test_material_fields.md) ####
+# Measured size distributions of polydisperse test materials and co-dosed mixtures.
+# Template columns carry these exact names (append them at the END of the template:
+# the screening scores are moved by position below). Absent columns are created as NA,
+# so every record without them aligns exactly as before.
+test_material_fields <- c(size.dist.family = "character", size.dist.alpha = "numeric",
+                          size.dist.median.um = "numeric", size.dist.gsd = "numeric",
+                          size.D10.um = "numeric", size.D50.um = "numeric", size.D90.um = "numeric",
+                          mixture_id = "character", component.fraction = "numeric",
+                          component.fraction.basis = "character")
+add_test_material_fields <- function(df) {
+  # column names are lower-cased on import: restore the field names
+  low <- setNames(tolower(names(test_material_fields)), names(test_material_fields))
+  df <- dplyr::rename(df, dplyr::any_of(low[low != names(low)]))
+  for (nm in names(test_material_fields)) {
+    if (!nm %in% names(df)) {
+      df[[nm]] <- if (test_material_fields[[nm]] == "numeric") NA_real_ else NA_character_
+    } else if (test_material_fields[[nm]] == "numeric") {
+      df[[nm]] <- suppressWarnings(as.numeric(df[[nm]]))
+    } else {
+      v <- trimws(as.character(df[[nm]]))
+      v[v %in% c("", "NA", "Not Reported")] <- NA_character_
+      df[[nm]] <- v
+    }
+  }
+  df$size.dist.family <- tolower(df$size.dist.family)
+  df$component.fraction.basis <- tolower(df$component.fraction.basis)
+  bad_family <- setdiff(unique(na.omit(df$size.dist.family)), c("powerlaw", "lognormal"))
+  bad_basis <- setdiff(unique(na.omit(df$component.fraction.basis)), c("number", "mass"))
+  bad_fraction <- !is.na(df$component.fraction) & (df$component.fraction < 0 | df$component.fraction > 1)
+  no_fraction <- !is.na(df$mixture_id) & is.na(df$component.fraction)
+  if (length(bad_family) || length(bad_basis) || any(bad_fraction) || any(no_fraction)) {
+    stop("test-material fields: size.dist.family must be 'powerlaw'/'lognormal', ",
+         "component.fraction.basis 'number'/'mass', component.fraction in [0, 1] and given for ",
+         "every mixture component (docs/test_material_fields.md)", call. = FALSE)
+  }
+  df
+}
+
 #### Extract Data from Submitted Templates ####
 
 #Set working directory to location with .csv files
@@ -769,6 +808,9 @@ aoc_setup <- aoc_setup %>%
   rename(nominal.dose.mg.kg.sediment = dose.mg.kg.sed.nominal,
          measured.dose.mg.kg.sediment = dose.mg.kg.sed.measured,
          nominal.dose.particles.kg.sediment = dose.particles.kg.sed.nominal)
+
+# optional test-material fields: pass through when the templates have them, else NA
+tomex2.0_aoc_setup <- add_test_material_fields(tomex2.0_aoc_setup)
   
 #Join tomex2.0_aoc_setup to aoc_setup (from ToMEx 1.0)
 
@@ -804,7 +846,8 @@ aoc_setup <- aoc_setup %>%
              `Nominal Dose Alternative Category` = NA_character_,
              `Measured Dose Alternative Category` = NA_character_,
              `Recovery (Days)` = NA_real_,
-             measured.dose.particles.kg.sediment = NA_real_,)
+             measured.dose.particles.kg.sediment = NA_real_,) %>% 
+  add_test_material_fields() # not recorded in ToMEx 1.0: NA
 
 #remove unwanted character strings from DOI column
 aoc_setup$doi <- gsub('https://dx.doi.org/','',aoc_setup$doi)
