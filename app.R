@@ -2834,6 +2834,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
           !is.na(translocatable_poly) ~ translocatable_poly,
           T ~ translocatable)) %>% 
       ##### ----- WIDTH ------ ###
+      ## Fiber diameter (um), the same rule for every fiber dimension: the reported
+      ## minimum/maximum width (measured, else nominal), else the reported width, else
+      ## 15 um (Kooi et al. 2021). The database's size.width.{min,max}.um.used.for.conversions
+      ## are not measurements (the tidying sets them to R.ave x length), so they are not used.
+      mutate(fiber.width.min.um = coalesce(size.width.min.mm.measured * 1000, size.width.min.mm.nominal * 1000,
+                                           size.width.um.used.for.conversions, 15),
+             fiber.width.max.um = coalesce(size.width.max.mm.measured * 1000, size.width.max.mm.nominal * 1000,
+                                           size.width.um.used.for.conversions, 15)) %>%
       ## Monodisperse ##
       mutate(size.width.um.used.for.conversions = case_when(
         is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
@@ -2841,47 +2849,49 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
         is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
         T ~ size.width.um.used.for.conversions # if available, use as-is
-      )) %>% 
+      )) %>%
       ### Polydisperse ###
-      # Min is always same #
-      # calculate size parameters using compartment characteristics
+      # Widths follow the (bioaccessible) lengths: W = L for spheres; the environment's width:length
+      # ratio for fragments and unreported shapes (Kooi et al. 2021); the fiber diameter, never wider
+      # than the fiber is long. Other shapes keep the width supplied.
+      # Min #
       mutate(size.width.min.um.used.for.conversions = case_when(
-        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
-        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
-        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
-        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions,
+        shape_f == "Fiber" ~ pmin(fiber.width.min.um, size.length.min.um.used.for.conversions),
+        shape_f %in% c("Fragment", "Not Reported") ~ R.ave * size.length.min.um.used.for.conversions,
+        TRUE ~ size.width.min.um.used.for.conversions)) %>%
       ### Max depends on ingest/trans limits ###
       # TRANS #
       mutate(size.width.max.um.trans = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.trans,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.trans),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.trans * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
       # INGEST #
       mutate(size.width.max.um.ingest = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.ingest,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.ingest),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.ingest * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
       # No bioavailability #
       mutate(size.width.max.um.used.for.conversions = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
-      
-      ###### ------ HEIGHT ----- ##### 
-    ## Monodisperse ##
-    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
-    mutate(size.height.um.used.for.conversions = case_when(
-      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
-      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
-    )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.used.for.conversions),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.used.for.conversions * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
+
+      ###### ------ HEIGHT ----- #####
+      ## Monodisperse ##
+      #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+      mutate(size.height.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
       ### Polydisperse ##
-      ## Min is always same ##
+      ## Min ##
       mutate(size.height.min.um.used.for.conversions = case_when(
         shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
@@ -2890,18 +2900,18 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(size.height.max.um.trans = case_when(
         shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # Ingest # 
+      )) %>%
+      # Ingest #
       mutate(size.height.max.um.ingest = case_when(
         shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # No bioavailability #
-      mutate(size.height.max.um.used.for.conversions = case_when(
-        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
-        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
       )) %>%
-      
+      # No bioavailability (largest particle of the whole distribution) #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     #### Monodisperse ##
@@ -5084,6 +5094,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
            size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
                                                  T ~ size.length.max.um.used.for.conversions)) %>% 
       ##### ----- WIDTH ------ ###
+      ## Fiber diameter (um), the same rule for every fiber dimension: the reported
+      ## minimum/maximum width (measured, else nominal), else the reported width, else
+      ## 15 um (Kooi et al. 2021). The database's size.width.{min,max}.um.used.for.conversions
+      ## are not measurements (the tidying sets them to R.ave x length), so they are not used.
+      mutate(fiber.width.min.um = coalesce(size.width.min.mm.measured * 1000, size.width.min.mm.nominal * 1000,
+                                           size.width.um.used.for.conversions, 15),
+             fiber.width.max.um = coalesce(size.width.max.mm.measured * 1000, size.width.max.mm.nominal * 1000,
+                                           size.width.um.used.for.conversions, 15)) %>%
       ## Monodisperse ##
       mutate(size.width.um.used.for.conversions = case_when(
         is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
@@ -5091,47 +5109,49 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
         is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
         T ~ size.width.um.used.for.conversions # if available, use as-is
-      )) %>% 
+      )) %>%
       ### Polydisperse ###
-      # Min is always same #
-      # calculate size parameters using compartment characteristics
+      # Widths follow the (bioaccessible) lengths: W = L for spheres; the environment's width:length
+      # ratio for fragments and unreported shapes (Kooi et al. 2021); the fiber diameter, never wider
+      # than the fiber is long. Other shapes keep the width supplied.
+      # Min #
       mutate(size.width.min.um.used.for.conversions = case_when(
-        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
-        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
-        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
-        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions,
+        shape_f == "Fiber" ~ pmin(fiber.width.min.um, size.length.min.um.used.for.conversions),
+        shape_f %in% c("Fragment", "Not Reported") ~ R.ave * size.length.min.um.used.for.conversions,
+        TRUE ~ size.width.min.um.used.for.conversions)) %>%
       ### Max depends on ingest/trans limits ###
       # TRANS #
       mutate(size.width.max.um.trans = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.trans,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.trans),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.trans * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
       # INGEST #
       mutate(size.width.max.um.ingest = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.ingest,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.ingest),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.ingest * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
       # No bioavailability #
       mutate(size.width.max.um.used.for.conversions = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
-      
-      ###### ------ HEIGHT ----- ##### 
-    ## Monodisperse ##
-    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
-    mutate(size.height.um.used.for.conversions = case_when(
-      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
-      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
-    )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.used.for.conversions),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.used.for.conversions * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
+
+      ###### ------ HEIGHT ----- #####
+      ## Monodisperse ##
+      #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+      mutate(size.height.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
       ### Polydisperse ##
-      ## Min is always same ##
+      ## Min ##
       mutate(size.height.min.um.used.for.conversions = case_when(
         shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
@@ -5140,19 +5160,18 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(size.height.max.um.trans = case_when(
         shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # Ingest # 
+      )) %>%
+      # Ingest #
       mutate(size.height.max.um.ingest = case_when(
         shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # No bioavailability #
-      mutate(size.height.max.um.used.for.conversions = case_when(
-        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
-        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
       )) %>%
-     
-      
+      # No bioavailability (largest particle of the whole distribution) #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     #### Monodisperse ##
@@ -6568,6 +6587,14 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
            size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
                                                  T ~ size.length.max.um.used.for.conversions)) %>% 
       ##### ----- WIDTH ------ ###
+      ## Fiber diameter (um), the same rule for every fiber dimension: the reported
+      ## minimum/maximum width (measured, else nominal), else the reported width, else
+      ## 15 um (Kooi et al. 2021). The database's size.width.{min,max}.um.used.for.conversions
+      ## are not measurements (the tidying sets them to R.ave x length), so they are not used.
+      mutate(fiber.width.min.um = coalesce(size.width.min.mm.measured * 1000, size.width.min.mm.nominal * 1000,
+                                           size.width.um.used.for.conversions, 15),
+             fiber.width.max.um = coalesce(size.width.max.mm.measured * 1000, size.width.max.mm.nominal * 1000,
+                                           size.width.um.used.for.conversions, 15)) %>%
       ## Monodisperse ##
       mutate(size.width.um.used.for.conversions = case_when(
         is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
@@ -6575,46 +6602,49 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
         is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
         T ~ size.width.um.used.for.conversions # if available, use as-is
-      )) %>% 
+      )) %>%
       ### Polydisperse ###
-      # Min is always same #
-      # calculate size parameters using compartment characteristics
+      # Widths follow the (bioaccessible) lengths: W = L for spheres; the environment's width:length
+      # ratio for fragments and unreported shapes (Kooi et al. 2021); the fiber diameter, never wider
+      # than the fiber is long. Other shapes keep the width supplied.
+      # Min #
       mutate(size.width.min.um.used.for.conversions = case_when(
-        shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
-        shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
-        shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
-        shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions)) %>% # average width to length ratio in the marine environment (kooi et al 2021)
+        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions,
+        shape_f == "Fiber" ~ pmin(fiber.width.min.um, size.length.min.um.used.for.conversions),
+        shape_f %in% c("Fragment", "Not Reported") ~ R.ave * size.length.min.um.used.for.conversions,
+        TRUE ~ size.width.min.um.used.for.conversions)) %>%
       ### Max depends on ingest/trans limits ###
       # TRANS #
       mutate(size.width.max.um.trans = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.trans,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.trans),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.trans * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
       # INGEST #
       mutate(size.width.max.um.ingest = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
+        shape_f == "Sphere" ~ size.length.max.um.ingest,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.ingest),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.ingest * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
       )) %>%
       # No bioavailability #
       mutate(size.width.max.um.used.for.conversions = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
-      ###### ------ HEIGHT ----- ##### 
-    ## Monodisperse ##
-    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
-    mutate(size.height.um.used.for.conversions = case_when(
-      shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
-      shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
-    )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.used.for.conversions),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.used.for.conversions * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
+
+      ###### ------ HEIGHT ----- #####
+      ## Monodisperse ##
+      #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+      mutate(size.height.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
       ### Polydisperse ##
-      ## Min is always same ##
+      ## Min ##
       mutate(size.height.min.um.used.for.conversions = case_when(
         shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
@@ -6623,17 +6653,18 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
       mutate(size.height.max.um.trans = case_when(
         shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # Ingest # 
+      )) %>%
+      # Ingest #
       mutate(size.height.max.um.ingest = case_when(
         shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # No bioavailability #
+      )) %>%
+      # No bioavailability (largest particle of the whole distribution) #
       mutate(size.height.max.um.used.for.conversions = case_when(
-        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
-        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
+        shape_f == "Sphere" ~ size.width.max.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     #### Monodisperse ##
@@ -9371,6 +9402,13 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
            size.length.max.um.ingest = case_when(ingestible_poly == "ingestible (some)" ~ x2M_ingest,
                                                  T ~ size.length.max.um.used.for.conversions)) %>% 
       ##### ----- WIDTH ------ ###
+      ## Widths supplied in the uploaded file are measurements and are kept. Otherwise the
+      ## same rules as for the ToMEx data: fiber diameter = the supplied width, else 15 um
+      ## (Kooi et al. 2021), never more than the fiber's length.
+      mutate(fiber.width.min.um = coalesce(size.width.min.um.used.for.conversions,
+                                           size.width.um.used.for.conversions, 15),
+             fiber.width.max.um = coalesce(size.width.max.um.used.for.conversions,
+                                           size.width.um.used.for.conversions, 15)) %>%
       ## Monodisperse ##
       mutate(size.width.um.used.for.conversions = case_when(
         is.na(size.width.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
@@ -9378,71 +9416,69 @@ server <- function (input, output){  #dark mode: #(input, output, session) {
         is.na(size.width.um.used.for.conversions) & shape_f == "Fragment" ~ size.length.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
         is.na(size.width.um.used.for.conversions) & shape_f == "Not Reported" ~ size.length.um.used.for.conversions * R.ave, #Assume fragment
         T ~ size.width.um.used.for.conversions # if available, use as-is
-      )) %>% 
+      )) %>%
       ### Polydisperse ###
-      # Min is always same #
-      # calculate size parameters using compartment characteristics
+      # Min #
       mutate(size.width.min.um.used.for.conversions = case_when(
-        is.na(size.width.min.um.used.for.conversions) & shape_f == "sphere" ~ size.length.min.um.used.for.conversions, #all dims same
-        is.na(size.width.min.um.used.for.conversions) & shape_f == "fiber" ~ R.ave * size.length.min.um.used.for.conversions, #median holds for all particles (Kooi et al 2021)
-        is.na(size.width.min.um.used.for.conversions) & shape_f == "Not Reported" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
-        is.na(size.width.min.um.used.for.conversions) & shape_f == "fragment" ~ R.ave * size.length.min.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
-        T ~ size.width.min.um.used.for.conversions
-        )) %>% 
+        !is.na(size.width.min.um.used.for.conversions) ~ size.width.min.um.used.for.conversions, # supplied
+        shape_f == "Sphere" ~ size.length.min.um.used.for.conversions,
+        shape_f == "Fiber" ~ pmin(fiber.width.min.um, size.length.min.um.used.for.conversions),
+        shape_f %in% c("Fragment", "Not Reported") ~ R.ave * size.length.min.um.used.for.conversions,
+        TRUE ~ size.width.min.um.used.for.conversions)) %>%
       ### Max depends on ingest/trans limits ###
       # TRANS #
       mutate(size.width.max.um.trans = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.trans, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.trans * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.trans,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.trans),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.trans * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
       # INGEST #
       mutate(size.width.max.um.ingest = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.ingest, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.ingest * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.ingest,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.ingest),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.ingest * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
       # No bioavailability #
       mutate(size.width.max.um.used.for.conversions = case_when(
-        is.na(size.width.max.um.used.for.conversions) & shape_f == "Fiber" ~ 15, # assume 15 um width for fibers unless already known (kooi et al. 2021)
-        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions, # W = L for spheres
-        shape_f == "Fragment" ~ size.length.max.um.used.for.conversions * R.ave, #use average width:length ratio for fragments
-        T ~ size.width.max.um.used.for.conversions # if available, use as-is (fibers only)
-      )) %>% 
-      
-      ###### ------ HEIGHT ----- ##### 
-    ## Monodisperse ##
-    #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
-    mutate(size.height.um.used.for.conversions = case_when(
-      is.na(size.height.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
-      is.na(size.height.um.used.for.conversions) & shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio, # if not spherical, height = width * H:W ratio
-      T ~ size.height.um.used.for.conversions
-    )) %>% 
+        shape_f == "Sphere" ~ size.length.max.um.used.for.conversions,
+        shape_f == "Fiber" ~ pmin(fiber.width.max.um, size.length.max.um.used.for.conversions),
+        shape_f %in% c("Fragment", "Not Reported") ~ size.length.max.um.used.for.conversions * R.ave,
+        TRUE ~ size.width.max.um.used.for.conversions
+      )) %>%
+
+      ###### ------ HEIGHT ----- #####
+      ## Monodisperse ##
+      #estimate height based on shape (data doesn't exist in ToMEx for monodisperse, because never reported)
+      mutate(size.height.um.used.for.conversions = case_when(
+        is.na(size.height.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions, # if spherical, height = length
+        is.na(size.height.um.used.for.conversions) & shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio, # if not spherical, height = width * H:W ratio
+        T ~ size.height.um.used.for.conversions # supplied
+      )) %>%
       ### Polydisperse ##
-      ## Min is always same ##
+      ## Min ##
       mutate(size.height.min.um.used.for.conversions = case_when(
         is.na(size.height.min.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.min.um.used.for.conversions, # if spherical, height = length
         is.na(size.height.min.um.used.for.conversions) & shape_f != "Sphere" ~ size.width.min.um.used.for.conversions * H_W_ratio, # if not spherical, height = width * H:W ratio
-        T ~ size.height.min.um.used.for.conversions
+        T ~ size.height.min.um.used.for.conversions # supplied
       )) %>%  # environment AND average height to width ratio (kooi et al 2021)
       # trans #
       mutate(size.height.max.um.trans = case_when(
         shape_f == "Sphere" ~ size.width.max.um.trans, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.trans * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # Ingest # 
+      )) %>%
+      # Ingest #
       mutate(size.height.max.um.ingest = case_when(
         shape_f == "Sphere" ~ size.width.max.um.ingest, # if spherical, height = length
         shape_f != "Sphere" ~ size.width.max.um.ingest * H_W_ratio # if not spherical, height = width * H:W ratio
-      )) %>% 
-      # No bioavailability #
-      mutate(size.height.max.um.used.for.conversions = case_when(
-        shape_f == "Sphere" ~ size.width.um.used.for.conversions, # if spherical, height = length
-        shape_f != "Sphere" ~ size.width.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
       )) %>%
-      
+      # No bioavailability (largest particle of the whole distribution) #
+      mutate(size.height.max.um.used.for.conversions = case_when(
+        shape_f == "Sphere" ~ size.width.max.um.used.for.conversions, # if spherical, height = length
+        shape_f != "Sphere" ~ size.width.max.um.used.for.conversions * H_W_ratio # if not spherical, height = width * H:W ratio
+      )) %>%
+
       ############ ------ Volume ------ ##########
     ###### re-calculate size, surface area, volume, mass based on user-defined R.ave ####
     #### Monodisperse ##
