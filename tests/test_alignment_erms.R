@@ -104,6 +104,33 @@ test_that("ingestion and translocation keep partially bioaccessible polydisperse
   expect_true(all(!is.na(some_t$EC_env_sa.particles.mL)))
 })
 
+test_that("database: sphere geometry and size ranges are consistent", {
+  # every sphere's stored (midpoint) volume and surface area are those of a sphere
+  # (ToMEx 1.0 records stored R.ave x length as the width; fixed in the tidying)
+  s <- aoc_all %>% filter(shape_f == "Sphere", !is.na(size.length.um.used.for.conversions),
+                          !is.na(particle.volume.um3))
+  L <- s$size.length.um.used.for.conversions
+  expect_gt(nrow(s), 5000)
+  expect_equal(s$particle.volume.um3, pi / 6 * L^3)
+  expect_equal(s$particle.surface.area.um2, pi * L^2)
+  expect_equal(s$size.width.um.used.for.conversions, L)
+  # a polydisperse material spans a range (min = max gives 0/0 power-law means)
+  p <- aoc_all %>% filter(polydispersity == "polydisperse", !is.na(size.length.min.um.used.for.conversions),
+                          !is.na(size.length.max.um.used.for.conversions))
+  expect_gt(nrow(p), 2000)
+  expect_true(all(p$size.length.min.um.used.for.conversions < p$size.length.max.um.used.for.conversions))
+  # Zhou et al. (10.1039/d0en00952k): measured 105.7 nm, range ~80-130 nm (Fig. 1b)
+  z <- aoc_all %>% filter(doi == "10.1039/d0en00952k")
+  expect_equal(unique(z$size.length.um.used.for.conversions), 0.1057)
+  expect_equal(unique(z$size.length.min.um.used.for.conversions), 0.08)
+  expect_equal(unique(z$size.length.max.um.used.for.conversions), 0.13)
+  # no NaN, infinite or negative aligned concentrations
+  for (d in list(ing, tra)) {
+    ec <- d %>% select(starts_with("EC_env_"))
+    expect_false(any(vapply(ec, function(v) any(is.nan(v) | is.infinite(v) | (!is.na(v) & v < 0)), logical(1))))
+  }
+})
+
 test_that("'none' (no bioaccessibility filter) keeps polydisperse records", {
   none <- run_ssd(aoc_all %>% filter(polydispersity == "polydisperse") %>% slice_head(n = 300), "none")
   ok <- !is.na(none$dose.particles.mL.master) & none$size.length.min.um.used.for.conversions <

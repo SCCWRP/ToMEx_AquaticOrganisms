@@ -750,6 +750,10 @@ mutate(R.ave = case_when(environment == "Marine" & exposure.route == "water" ~ R
     shape == "Not Reported" ~ R.ave * 0.67 * size.length.max.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
     shape == "fiber" ~ R.ave * size.length.max.um.used.for.conversions, #hieght same as width
     shape == "fragment" ~ R.ave * 0.67 * size.length.max.um.used.for.conversions)) %>%  # average width to length ratio in the marine environment AND average height to width ratio (kooi et al 2021)
+  # spheres: width = length (left NA, the SA and volume functions used R.ave x length)
+  mutate(size.width.um.used.for.conversions = case_when(
+    is.na(size.width.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions,
+    TRUE ~ size.width.um.used.for.conversions)) %>% 
   # calculate surface are for monodisperse particles
   mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
                                            width = size.width.um.used.for.conversions,

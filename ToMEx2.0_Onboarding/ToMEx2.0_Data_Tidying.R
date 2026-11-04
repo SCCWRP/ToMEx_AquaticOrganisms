@@ -946,6 +946,39 @@ na_polymer = unique(tomex2.0_aoc_setup_final$poly_f[is.na(tomex2.0_aoc_setup_fin
 na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
 na_polymer # >>> check the density in the literature
 
+#### ToMEx 1.0 spheres: particle volume, surface area and mass ####
+# RDAmaker.R never set the width of a sphere's (midpoint) particle, so volumefnx() and
+# SAfnx() filled it with R.ave x length: aoc_setup.RDS stores 0.67-0.77 x the sphere's
+# volume and mass and 0.79-0.85 x its surface area for every ToMEx 1.0 sphere. The ToMEx 1.0
+# particle counts and mass doses were converted with the true sphere mass and are kept.
+# Recompute the per-particle values (W = H = L) and the dose metrics derived from them; the
+# min/max values of polydisperse spheres were already correct. Mass keeps its density.
+fix_tomex1_sphere_geometry <- function(df) {
+  s <- as.character(df$source) != "ToMEx 2.0" & df$shape_f %in% "Sphere" &
+    !is.na(df$size.length.um.used.for.conversions) & !is.na(df$particle.volume.um3)
+  if (!any(s)) return(df)
+  L <- df$size.length.um.used.for.conversions[s]
+  v <- volumefnx(length = L, width = L, height = L)
+  sa <- SAfnx(length = L, width = L, height = L)
+  kv <- v / df$particle.volume.um3[s]
+  ksa <- sa / df$particle.surface.area.um2[s]
+  df$size.width.um.used.for.conversions[s] <- L
+  df$size.height.um.used.for.conversions[s] <- L
+  df$particle.volume.um3[s] <- v
+  df$particle.surface.area.um2[s] <- sa
+  df$mass.per.particle.mg[s] <- df$mass.per.particle.mg[s] * kv
+  for (col in intersect(c("dose.um3.mL.master", "dose.um3.kg.sediment.master"), names(df)))
+    df[[col]][s] <- df[[col]][s] * kv
+  for (col in intersect(c("dose.um2.mL.master", "dose.um2.kg.sediment.master",
+                          "dose.surface.area.um2.mL.master"), names(df)))
+    df[[col]][s] <- df[[col]][s] * ksa
+  for (col in intersect(c("dose.um2.ug.mL.master", "dose.um2.ug.kg.sediment.master",
+                          "particle.surface.area.um2.mg"), names(df)))
+    df[[col]][s] <- df[[col]][s] * ksa / kv
+  df
+}
+tomex2.0_aoc_setup_final <- fix_tomex1_sphere_geometry(tomex2.0_aoc_setup_final)
+
 #### Variable Management - Ana's code ####
 
 #life stage
