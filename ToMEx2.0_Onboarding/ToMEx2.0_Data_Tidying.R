@@ -946,10 +946,12 @@ tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>%
 # volume and mass and 0.79-0.85 x its surface area for every ToMEx 1.0 sphere. The ToMEx 1.0
 # particle counts and mass doses were converted with the true sphere mass and are kept.
 # Recompute the per-particle values (W = H = L) and the dose metrics derived from them; the
-# min/max values of polydisperse spheres were already correct. Mass keeps its density.
+# min/max values of polydisperse spheres were already correct. Mass keeps its density. Spheres
+# without a stored volume (no width:length ratio for their exposure route) get one too: a
+# sphere needs none; their masses and conversions are completed below.
 fix_tomex1_sphere_geometry <- function(df) {
   s <- as.character(df$source) != "ToMEx 2.0" & df$shape_f %in% "Sphere" &
-    !is.na(df$size.length.um.used.for.conversions) & !is.na(df$particle.volume.um3)
+    !is.na(df$size.length.um.used.for.conversions)
   if (!any(s)) return(df)
   L <- df$size.length.um.used.for.conversions[s]
   v <- volumefnx(length = L, width = L, height = L)
@@ -973,16 +975,17 @@ fix_tomex1_sphere_geometry <- function(df) {
 }
 tomex2.0_aoc_setup_final <- fix_tomex1_sphere_geometry(tomex2.0_aoc_setup_final)
 
-#### ToMEx 1.0 records without a density ####
-# Fill from the polymer table (as for ToMEx 2.0 above) and compute what the missing density had
-# left out, with the same equations as for ToMEx 2.0: particle masses, the conversion between
-# particle and mass doses where one of them is missing, and the volume / surface-area doses.
+#### ToMEx 1.0 densities, particle masses and dose conversions ####
+# Fill missing densities from the polymer table (as for ToMEx 2.0 above), then complete what
+# RDAmaker.R left out, with the same equations as for ToMEx 2.0: particle masses where a
+# density and a particle volume exist, the conversion between particle and mass doses where
+# one of them is missing, and the volume / surface-area doses. RDAmaker.R converts sediment
+# doses only; ToMEx 1.0 water doses were converted in the ToMEx 1.0 compilation, which left
+# some mass doses without a particle count. Existing values are never changed.
 fill_tomex1_density <- function(df, table) {
   t1 <- as.character(df$source) != "ToMEx 2.0"
-  before <- is.na(df$density.g.cm3)
   df <- fill_density_from_table(df, table, rows = t1)
-  new <- t1 & before & !is.na(df$density.g.cm3)
-  if (!any(new)) return(df)
+  new <- t1
   mass <- function(v) massfnx(v = v, p = df$density.g.cm3) * 1e-3
   set_missing <- function(col, value, i = new) {
     k <- i & is.na(df[[col]]) & !is.na(value)

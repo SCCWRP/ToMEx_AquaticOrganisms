@@ -143,6 +143,17 @@ test_that("database: sphere geometry and size ranges are consistent", {
   expect_false(anyNA(md$mass.per.particle.mg))
   expect_false(anyNA(md$dose.particles.mL.master[!is.na(md$dose.mg.L.master)]))
   expect_false(anyNA(md$dose.particles.kg.sediment.master[!is.na(md$dose.mg.kg.sediment.master)]))
+  # every mass dose with a density and particle volume has a particle count (ToMEx 1.0 records
+  # whose water doses were not converted in the ToMEx 1.0 compilation included)
+  mw <- aoc_all %>% filter(!is.na(dose.mg.L.master), !is.na(density.g.cm3), !is.na(particle.volume.um3))
+  expect_false(anyNA(mw$dose.particles.mL.master))
+  conv <- mw %>% filter(dose.particles.mL.master.converted.reported == "converted", source != "ToMEx 2.0",
+                        doi %in% c("10.1016/j.jhazmat.2019.04.039", "10.1016/j.envpol.2019.01.098"))
+  expect_gt(nrow(conv), 50)
+  expect_equal(conv$dose.particles.mL.master, conv$dose.mg.L.master / conv$mass.per.particle.mg / 1000)
+  # spheres need no width:length ratio: every sphere with a length has a volume
+  sp <- aoc_all %>% filter(shape_f == "Sphere", !is.na(size.length.um.used.for.conversions))
+  expect_false(anyNA(sp$particle.volume.um3))
   # no NaN, infinite or negative aligned concentrations
   for (d in list(ing, tra)) {
     ec <- d %>% select(starts_with("EC_env_"))
