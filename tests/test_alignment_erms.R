@@ -124,6 +124,25 @@ test_that("database: sphere geometry and size ranges are consistent", {
   expect_equal(unique(z$size.length.um.used.for.conversions), 0.1057)
   expect_equal(unique(z$size.length.min.um.used.for.conversions), 0.08)
   expect_equal(unique(z$size.length.max.um.used.for.conversions), 0.13)
+  # densities: the record's own value, else the polymer table (polymer_densities.csv)
+  tab <- read.csv(file.path(root, "polymer_densities.csv"), check.names = FALSE)
+  expect_true(all(aoc_all$density.source[!is.na(aoc_all$density.g.cm3)] %in% c("record", "polymer table")))
+  pt <- aoc_all %>% filter(density.source == "polymer table")
+  expect_equal(pt$density.g.cm3, tab$density.g.cm3[match(tolower(as.character(pt$poly_f)), tolower(tab$poly_f))])
+  # reported densities are not overwritten (ToMEx 1.0 PMMA reports 1.19; the table has 1.18)
+  expect_equal(unique(aoc_all$density.g.cm3[aoc_all$doi == "10.1016/j.envpol.2019.113259"]), 1.19)
+  # 10.1016/j.scitotenv.2021.149217 reports no density (the template's 0.075 was an entry error)
+  expect_equal(unique(aoc_all$density.source[aoc_all$doi == "10.1016/j.scitotenv.2021.149217"]), "polymer table")
+  # particle masses use the record's density and volume
+  m <- aoc_all %>% filter(!is.na(mass.per.particle.mg), !is.na(particle.volume.um3))
+  expect_equal(m$mass.per.particle.mg, m$density.g.cm3 * m$particle.volume.um3 * 1e-9)
+  # records whose density comes from the polymer table get their particle masses and the
+  # particle-count conversion of a mass dose (the table used to be applied after both)
+  md <- aoc_all %>% filter(density.source == "polymer table", !is.na(particle.volume.um3))
+  expect_gt(nrow(md), 500)
+  expect_false(anyNA(md$mass.per.particle.mg))
+  expect_false(anyNA(md$dose.particles.mL.master[!is.na(md$dose.mg.L.master)]))
+  expect_false(anyNA(md$dose.particles.kg.sediment.master[!is.na(md$dose.mg.kg.sediment.master)]))
   # no NaN, infinite or negative aligned concentrations
   for (d in list(ing, tra)) {
     ec <- d %>% select(starts_with("EC_env_"))

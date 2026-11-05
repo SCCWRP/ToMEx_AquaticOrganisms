@@ -55,6 +55,38 @@ add_test_material_fields <- function(df) {
   df
 }
 
+#### Polymer densities (polymer_densities.csv) ####
+# A record's own density (template value, or the ToMEx 1.0 value) is always used; the polymer
+# table fills only densities that are missing. The table holds literature values and, for the
+# other polymers, the median of the template densities of ToMEx 2.0 v2.0.1 (column `source`).
+# Polymer names are matched case-insensitively. `density.source`: "record" or "polymer table".
+read_polymer_densities <- function(path = "polymer_densities.csv") {
+  d <- readr::read_csv(path, show_col_types = FALSE)
+  stopifnot(all(c("poly_f", "density.g.cm3", "source") %in% names(d)),
+            !anyDuplicated(tolower(trimws(d$poly_f))), all(d$density.g.cm3 > 0))
+  d
+}
+fill_density_from_table <- function(df, table, rows = rep(TRUE, nrow(df))) {
+  if (!"density.source" %in% names(df)) df$density.source <- NA_character_
+  key <- tolower(trimws(as.character(df$poly_f)))
+  aux <- table$density.g.cm3[match(key, tolower(trimws(table$poly_f)))]
+  own <- rows & !is.na(df$density.g.cm3)
+  fill <- rows & is.na(df$density.g.cm3) & !is.na(aux)
+  df$density.source[own] <- "record"
+  df$density.source[fill] <- "polymer table"
+  df$density.g.cm3[fill] <- aux[fill]
+  df
+}
+# Densities outside 0.8-2.6 g/cm3 are not plausible for a polymer: list them for review
+# (they are kept; correct them in the template).
+report_implausible_densities <- function(df, path = "ToMEx2.0_Onboarding/density_review.csv") {
+  bad <- df %>% filter(!is.na(density.g.cm3), density.g.cm3 < 0.8 | density.g.cm3 > 2.6) %>%
+    count(source, doi, poly_f, density.g.cm3, density.reported.estimated, density.source, name = "records")
+  readr::write_csv(bad, path, na = "")
+  if (nrow(bad)) warning(nrow(bad), " study x polymer combination(s) have a density outside 0.8-2.6 g/cm3; see ", path, call. = FALSE)
+  invisible(bad)
+}
+
 #### Extract Data from Submitted Templates ####
 
 #Set working directory to location with .csv files
@@ -547,21 +579,12 @@ tomex2.0_aoc_setup$poly_f = fct_collapse(tomex2.0_aoc_setup$poly_f,
 
 tomex2.0_aoc_setup$poly_f = fct_na_value_to_level(tomex2.0_aoc_setup$poly_f, "Not Reported")
 
-#Calculate the median density for each polymer
-median_density_by_polymer = tomex2.0_aoc_setup %>%
-  group_by(poly_f) %>%
-  summarize(median_density = median(density.g.cm3, na.rm = TRUE)) %>% 
-  ungroup()
-
-#Join the mean temperature back to the original data
-tomex2.0_aoc_setup = left_join(tomex2.0_aoc_setup, median_density_by_polymer, by = "poly_f")
-
-#Fill NA values of density.g.cm.3. with the calculated median per polymer type
-tomex2.0_aoc_setup = tomex2.0_aoc_setup %>%
-  mutate(density.g.cm3 = ifelse(is.na(density.g.cm3), median_density, density.g.cm3))
-
-#Remove the temporary column median_density
-tomex2.0_aoc_setup = tomex2.0_aoc_setup %>% select(-median_density)
+#Polymer densities: the template's value if given, else the polymer table (polymer_densities.csv).
+#Filled here, before particle masses and dose conversions are computed. (Previously the median of
+#the templates' values was filled here, and a literature list later overwrote every record of 17
+#polymers, including reported densities, after the masses had been computed.)
+polymer_densities <- read_polymer_densities("polymer_densities.csv")
+tomex2.0_aoc_setup <- fill_density_from_table(tomex2.0_aoc_setup, polymer_densities)
 
   tomex2.0_aoc_setup <- tomex2.0_aoc_setup %>% 
   #Factor shape
@@ -847,7 +870,8 @@ aoc_setup <- aoc_setup %>%
              `Measured Dose Alternative Category` = NA_character_,
              `Recovery (Days)` = NA_real_,
              measured.dose.particles.kg.sediment = NA_real_,) %>% 
-  add_test_material_fields() # not recorded in ToMEx 1.0: NA
+  add_test_material_fields() %>% # not recorded in ToMEx 1.0: NA
+  mutate(density.source = ifelse(is.na(density.g.cm3), NA_character_, "record"))
 
 #remove unwanted character strings from DOI column
 aoc_setup$doi <- gsub('https://dx.doi.org/','',aoc_setup$doi)
@@ -912,39 +936,9 @@ tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>%
   select(-c(body.size.source.y, body.size.source.x))
 #(maximum ingestible size is assigned after life stages are harmonized, below)
 
-####### Fix missing polymer densities in both TOMEX1 and TOMEX2 ####
-#Identify unique Polymers with NA values in density.g.cm3
-na_polymer = unique(tomex2.0_aoc_setup$poly_f[is.na(tomex2.0_aoc_setup$density.g.cm3)])
-
-# Convert to character and sort the unique species alphabetically
-na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
-na_polymer # >>> check the density in the literature
-
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "High Density Polyethylene"] = 0.953
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polylactic Acid"] = 1.240
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polycarbonate"] = 1.20
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Latex"] = 1.040
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Biopolymer"] = 1.240
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Poly(Styrene-co-acrylonitrile)"] = 1.08
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyethylene Vinyl Acetate"] = 0.953
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polymethylmethacrylate"] = 1.18
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyisoprene"] = 0.905
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polytetrafluoroethylene"] = 2.2
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyurethane"] = 1.19
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyvinyl Acetate"] = 1.19
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyvinylchloride/vinylacetate co-polymer"] = 1.38
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Sodium Polyacrylate"] = 1.32
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Starch/Polybutylene Adipate Terephthalate/Polylactic Acid"] = 1.05
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Tire Wear"] = 1.45
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyamidoamine"] = 1.22
-
-
-#  check one last time to see if any densities are missing ##
-na_polymer = unique(tomex2.0_aoc_setup_final$poly_f[is.na(tomex2.0_aoc_setup_final$density.g.cm3)])
-
-# Convert to character and sort the unique species alphabetically
-na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
-na_polymer # >>> check the density in the literature
+####### Polymer densities ####
+#ToMEx 2.0 densities are filled from polymer_densities.csv above (before the particle masses);
+#ToMEx 1.0 records without a density are filled after the sphere-geometry fix below.
 
 #### ToMEx 1.0 spheres: particle volume, surface area and mass ####
 # RDAmaker.R never set the width of a sphere's (midpoint) particle, so volumefnx() and
@@ -978,6 +972,47 @@ fix_tomex1_sphere_geometry <- function(df) {
   df
 }
 tomex2.0_aoc_setup_final <- fix_tomex1_sphere_geometry(tomex2.0_aoc_setup_final)
+
+#### ToMEx 1.0 records without a density ####
+# Fill from the polymer table (as for ToMEx 2.0 above) and compute what the missing density had
+# left out, with the same equations as for ToMEx 2.0: particle masses, the conversion between
+# particle and mass doses where one of them is missing, and the volume / surface-area doses.
+fill_tomex1_density <- function(df, table) {
+  t1 <- as.character(df$source) != "ToMEx 2.0"
+  before <- is.na(df$density.g.cm3)
+  df <- fill_density_from_table(df, table, rows = t1)
+  new <- t1 & before & !is.na(df$density.g.cm3)
+  if (!any(new)) return(df)
+  mass <- function(v) massfnx(v = v, p = df$density.g.cm3) * 1e-3
+  set_missing <- function(col, value, i = new) {
+    k <- i & is.na(df[[col]]) & !is.na(value)
+    df[[col]][k] <<- value[k]
+    k
+  }
+  set_missing("mass.per.particle.mg", mass(df$particle.volume.um3))
+  if ("particle.volume.um3.min" %in% names(df)) set_missing("mass.per.particle.mg.min", mass(df$particle.volume.um3.min))
+  if ("particle.volume.um3.max" %in% names(df)) set_missing("mass.per.particle.mg.max", mass(df$particle.volume.um3.max))
+  mg <- df$mass.per.particle.mg
+  label <- function(col, k) {
+    v <- as.character(df[[col]]); v[k] <- "converted"; df[[col]] <<- factor(v)
+  }
+  label("dose.mg.L.master.converted.reported", set_missing("dose.mg.L.master", df$dose.particles.mL.master * 1000 * mg))
+  label("dose.particles.mL.master.converted.reported", set_missing("dose.particles.mL.master", df$dose.mg.L.master / mg / 1000))
+  label("dose.mg.kg.sediment.master.converted.reported",
+        set_missing("dose.mg.kg.sediment.master", df$dose.particles.kg.sediment.master * mg))
+  label("dose.particles.kg.sediment.master.converted.reported",
+        set_missing("dose.particles.kg.sediment.master", df$dose.mg.kg.sediment.master / mg))
+  set_missing("dose.um3.mL.master", df$particle.volume.um3 * df$dose.particles.mL.master)
+  set_missing("dose.um3.kg.sediment.master", df$particle.volume.um3 * df$dose.particles.kg.sediment.master)
+  set_missing("dose.um2.mL.master", as.numeric(df$particle.surface.area.um2) * df$dose.particles.mL.master)
+  set_missing("dose.um2.kg.sediment.master", as.numeric(df$particle.surface.area.um2) * df$dose.particles.kg.sediment.master)
+  set_missing("dose.um2.ug.mL.master", df$dose.um2.mL.master / (mg / 1000))
+  set_missing("dose.um2.ug.kg.sediment.master", df$dose.um2.kg.sediment.master / (mg / 1000))
+  df
+}
+tomex2.0_aoc_setup_final <- fill_tomex1_density(tomex2.0_aoc_setup_final, polymer_densities)
+report_implausible_densities(tomex2.0_aoc_setup_final)
+
 
 #### Variable Management - Ana's code ####
 
