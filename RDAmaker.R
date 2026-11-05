@@ -4,6 +4,7 @@
 library(tidyverse) #General everything
 
 source("functions.R") # necessary for surface area, volume calculations
+source("vivo_functions.R") # in vitro / in vivo normalization
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
 R.ave.water.freshwater <- 0.67
@@ -647,8 +648,7 @@ aoc_setup <- aoc_v1 %>% # start with original dataset
     bio.org == "tissue" ~ "Tissue",
     bio.org == "organism"~"Organism",
     bio.org == "population"~ "Population")))%>%
-  mutate(vivo_f = factor(case_when(invitro.invivo == "invivo"~"In Vivo",
-                                   invitro.invivo == "invitro"~"In Vitro")))%>% ##Renames for widget (Not using a widget right now, but saving for human health database)
+  mutate(vivo_f = factor(normalize_vivo(invitro.invivo, doi = doi), levels = c("In Vivo", "In Vitro")))%>% ##shared normalizer (vivo_functions.R); unknown values error
   mutate(life_f = factor(case_when(life.stage == "Early"~"Early",
                                    life.stage == "Juvenile"~"Juvenile",
                                    life.stage == "Adult"~"Adult",
@@ -750,6 +750,10 @@ mutate(R.ave = case_when(environment == "Marine" & exposure.route == "water" ~ R
     shape == "Not Reported" ~ R.ave * 0.67 * size.length.max.um.used.for.conversions, # average width to length ratio in the marine environment (kooi et al 2021)
     shape == "fiber" ~ R.ave * size.length.max.um.used.for.conversions, #hieght same as width
     shape == "fragment" ~ R.ave * 0.67 * size.length.max.um.used.for.conversions)) %>%  # average width to length ratio in the marine environment AND average height to width ratio (kooi et al 2021)
+  # spheres: width = length (left NA, the SA and volume functions used R.ave x length)
+  mutate(size.width.um.used.for.conversions = case_when(
+    is.na(size.width.um.used.for.conversions) & shape_f == "Sphere" ~ size.length.um.used.for.conversions,
+    TRUE ~ size.width.um.used.for.conversions)) %>% 
   # calculate surface are for monodisperse particles
   mutate(particle.surface.area.um2 = SAfnx(length = size.length.um.used.for.conversions,
                                            width = size.width.um.used.for.conversions,

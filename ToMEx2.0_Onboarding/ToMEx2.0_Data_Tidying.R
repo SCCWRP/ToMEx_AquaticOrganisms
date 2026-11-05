@@ -8,11 +8,84 @@ library(tidyverse)
 library(readr)
 
 source("functions.R") # necessary for surface area, volume calculations
+source("body_length_functions.R") # body length resolution, mouth size, Jams model domain
+source("vivo_functions.R") # in vitro / in vivo normalization and SSD eligibility
 
 R.ave.water.marine <- 0.77 # average length to width ratio of microplastics in marine environment (Kooi et al. 2021)
 R.ave.water.freshwater <- 0.67
 R.ave.sediment.marine <- 0.75
 R.ave.sediment.freshwater <- 0.70
+
+#### Optional test-material fields (docs/test_material_fields.md) ####
+# Measured size distributions of polydisperse test materials and co-dosed mixtures.
+# Template columns carry these exact names (append them at the END of the template:
+# the screening scores are moved by position below). Absent columns are created as NA,
+# so every record without them aligns exactly as before.
+test_material_fields <- c(size.dist.family = "character", size.dist.alpha = "numeric",
+                          size.dist.median.um = "numeric", size.dist.gsd = "numeric",
+                          size.D10.um = "numeric", size.D50.um = "numeric", size.D90.um = "numeric",
+                          mixture_id = "character", component.fraction = "numeric",
+                          component.fraction.basis = "character")
+add_test_material_fields <- function(df) {
+  # column names are lower-cased on import: restore the field names
+  low <- setNames(tolower(names(test_material_fields)), names(test_material_fields))
+  df <- dplyr::rename(df, dplyr::any_of(low[low != names(low)]))
+  for (nm in names(test_material_fields)) {
+    if (!nm %in% names(df)) {
+      df[[nm]] <- if (test_material_fields[[nm]] == "numeric") NA_real_ else NA_character_
+    } else if (test_material_fields[[nm]] == "numeric") {
+      df[[nm]] <- suppressWarnings(as.numeric(df[[nm]]))
+    } else {
+      v <- trimws(as.character(df[[nm]]))
+      v[v %in% c("", "NA", "Not Reported")] <- NA_character_
+      df[[nm]] <- v
+    }
+  }
+  df$size.dist.family <- tolower(df$size.dist.family)
+  df$component.fraction.basis <- tolower(df$component.fraction.basis)
+  bad_family <- setdiff(unique(na.omit(df$size.dist.family)), c("powerlaw", "lognormal"))
+  bad_basis <- setdiff(unique(na.omit(df$component.fraction.basis)), c("number", "mass"))
+  bad_fraction <- !is.na(df$component.fraction) & (df$component.fraction < 0 | df$component.fraction > 1)
+  no_fraction <- !is.na(df$mixture_id) & is.na(df$component.fraction)
+  if (length(bad_family) || length(bad_basis) || any(bad_fraction) || any(no_fraction)) {
+    stop("test-material fields: size.dist.family must be 'powerlaw'/'lognormal', ",
+         "component.fraction.basis 'number'/'mass', component.fraction in [0, 1] and given for ",
+         "every mixture component (docs/test_material_fields.md)", call. = FALSE)
+  }
+  df
+}
+
+#### Polymer densities (polymer_densities.csv) ####
+# A record's own density (template value, or the ToMEx 1.0 value) is always used; the polymer
+# table fills only densities that are missing. The table holds literature values and, for the
+# other polymers, the median of the template densities of ToMEx 2.0 v2.0.1 (column `source`).
+# Polymer names are matched case-insensitively. `density.source`: "record" or "polymer table".
+read_polymer_densities <- function(path = "polymer_densities.csv") {
+  d <- readr::read_csv(path, show_col_types = FALSE)
+  stopifnot(all(c("poly_f", "density.g.cm3", "source") %in% names(d)),
+            !anyDuplicated(tolower(trimws(d$poly_f))), all(d$density.g.cm3 > 0))
+  d
+}
+fill_density_from_table <- function(df, table, rows = rep(TRUE, nrow(df))) {
+  if (!"density.source" %in% names(df)) df$density.source <- NA_character_
+  key <- tolower(trimws(as.character(df$poly_f)))
+  aux <- table$density.g.cm3[match(key, tolower(trimws(table$poly_f)))]
+  own <- rows & !is.na(df$density.g.cm3)
+  fill <- rows & is.na(df$density.g.cm3) & !is.na(aux)
+  df$density.source[own] <- "record"
+  df$density.source[fill] <- "polymer table"
+  df$density.g.cm3[fill] <- aux[fill]
+  df
+}
+# Densities outside 0.8-2.6 g/cm3 are not plausible for a polymer: list them for review
+# (they are kept; correct them in the template).
+report_implausible_densities <- function(df, path = "ToMEx2.0_Onboarding/density_review.csv") {
+  bad <- df %>% filter(!is.na(density.g.cm3), density.g.cm3 < 0.8 | density.g.cm3 > 2.6) %>%
+    count(source, doi, poly_f, density.g.cm3, density.reported.estimated, density.source, name = "records")
+  readr::write_csv(bad, path, na = "")
+  if (nrow(bad)) warning(nrow(bad), " study x polymer combination(s) have a density outside 0.8-2.6 g/cm3; see ", path, call. = FALSE)
+  invisible(bad)
+}
 
 #### Extract Data from Submitted Templates ####
 
@@ -261,13 +334,9 @@ rename_with(~ gsub(" |[?]|[(]|[)]|-|/|\\^", ".",.x), everything()) %>% ### repla
    #Factor organism group
    mutate(organism.group = factor(organism.group)) %>% 
    rename(org_f = organism.group) %>% 
-   #Factor in vitro in vivo
-   mutate(in.vitro.in.vivo = factor(case_when(
-     in.vitro.in.vivo == "In Vivo" ~ "In Vivo",
-     in.vitro.in.vivo == "In Vitro" ~ "In Vitro",
-     in.vitro.in.vivo == "in vivo" ~ "In Vivo",
-     in.vitro.in.vivo == "in vitro" ~ "In Vivo",
-   ))) %>% 
+   #Factor in vitro in vivo (shared normalizer; previously lowercase "in vitro" was recoded to "In Vivo")
+   mutate(in.vitro.in.vivo = factor(normalize_vivo(in.vitro.in.vivo, doi = doi),
+                                    levels = c("In Vivo", "In Vitro"))) %>% 
    rename(vivo_f = in.vitro.in.vivo) %>%
    #Factor life stage
    mutate(life.stage = factor(life.stage)) %>%  
@@ -510,21 +579,12 @@ tomex2.0_aoc_setup$poly_f = fct_collapse(tomex2.0_aoc_setup$poly_f,
 
 tomex2.0_aoc_setup$poly_f = fct_na_value_to_level(tomex2.0_aoc_setup$poly_f, "Not Reported")
 
-#Calculate the median density for each polymer
-median_density_by_polymer = tomex2.0_aoc_setup %>%
-  group_by(poly_f) %>%
-  summarize(median_density = median(density.g.cm3, na.rm = TRUE)) %>% 
-  ungroup()
-
-#Join the mean temperature back to the original data
-tomex2.0_aoc_setup = left_join(tomex2.0_aoc_setup, median_density_by_polymer, by = "poly_f")
-
-#Fill NA values of density.g.cm.3. with the calculated median per polymer type
-tomex2.0_aoc_setup = tomex2.0_aoc_setup %>%
-  mutate(density.g.cm3 = ifelse(is.na(density.g.cm3), median_density, density.g.cm3))
-
-#Remove the temporary column median_density
-tomex2.0_aoc_setup = tomex2.0_aoc_setup %>% select(-median_density)
+#Polymer densities: the template's value if given, else the polymer table (polymer_densities.csv).
+#Filled here, before particle masses and dose conversions are computed. (Previously the median of
+#the templates' values was filled here, and a literature list later overwrote every record of 17
+#polymers, including reported densities, after the masses had been computed.)
+polymer_densities <- read_polymer_densities("polymer_densities.csv")
+tomex2.0_aoc_setup <- fill_density_from_table(tomex2.0_aoc_setup, polymer_densities)
 
   tomex2.0_aoc_setup <- tomex2.0_aoc_setup %>% 
   #Factor shape
@@ -771,6 +831,9 @@ aoc_setup <- aoc_setup %>%
   rename(nominal.dose.mg.kg.sediment = dose.mg.kg.sed.nominal,
          measured.dose.mg.kg.sediment = dose.mg.kg.sed.measured,
          nominal.dose.particles.kg.sediment = dose.particles.kg.sed.nominal)
+
+# optional test-material fields: pass through when the templates have them, else NA
+tomex2.0_aoc_setup <- add_test_material_fields(tomex2.0_aoc_setup)
   
 #Join tomex2.0_aoc_setup to aoc_setup (from ToMEx 1.0)
 
@@ -785,9 +848,14 @@ names <- tomex2.0_aoc_setup %>%
 
 #Select columns from each data frame
 tomex2.0_aoc_setup <- tomex2.0_aoc_setup %>%
-  select(all_of(names))
+  select(all_of(names)) %>% 
+  #ToMEx 2.0 templates do not report mouth sizes; flag used below to keep reported values
+  mutate(mouth.size.reported = FALSE)
 
 aoc_setup <- aoc_setup %>%
+  #ToMEx 1.0 mouth sizes are either reported (Koelmans et al. 2020) or estimated from body length
+  mutate(mouth.size.reported = max.size.ingest.reported.estimated %in% "reported" &
+           !is.na(max.size.ingest.mm)) %>% 
   mutate(sample.size = as.character(sample.size)) %>% 
   mutate(replicates = as.character(replicates)) %>% 
   mutate(media.sal.ppt = as.character(media.sal.ppt)) %>% 
@@ -801,7 +869,9 @@ aoc_setup <- aoc_setup %>%
              `Nominal Dose Alternative Category` = NA_character_,
              `Measured Dose Alternative Category` = NA_character_,
              `Recovery (Days)` = NA_real_,
-             measured.dose.particles.kg.sediment = NA_real_,)
+             measured.dose.particles.kg.sediment = NA_real_,) %>% 
+  add_test_material_fields() %>% # not recorded in ToMEx 1.0: NA
+  mutate(density.source = ifelse(is.na(density.g.cm3), NA_character_, "record"))
 
 #remove unwanted character strings from DOI column
 aoc_setup$doi <- gsub('https://dx.doi.org/','',aoc_setup$doi)
@@ -810,7 +880,7 @@ aoc_setup$doi <- gsub('doi.org/','',aoc_setup$doi)
 aoc_setup$doi <- gsub('https://','',aoc_setup$doi)
 
 aoc_setup <- aoc_setup %>%
-  select(all_of(names)) #If this throws an error, aoc_setup doesn't have all the column names as tomex2.0 df
+  select(all_of(c(names, "mouth.size.reported", "max.size.ingest.mm", "body.size.source"))) #If this throws an error, aoc_setup doesn't have all the column names as tomex2.0 df
 
 #Join rows
 tomex2.0_aoc_setup_final <- bind_rows(aoc_setup, tomex2.0_aoc_setup) %>% 
@@ -829,10 +899,11 @@ bodysize_summary <- readRDS("aoc_setup.RDS") %>%
   filter(!(species_f == "Oryzias melastigma" & body.length.cm %in% c(2.1, 2.2)))
 
 #Grab table of additional body size data to add to database
-bodysize_addons <- read_csv("gape_size.csv") %>% 
-  mutate(species_f = as.factor(species_f)) 
-#add life stage column
-bodysize_addons$life_f <- as.factor("Adult")
+#(gape_size.csv: species x life-stage reference lengths, plus optional ingestion-size overrides)
+gape_lookup <- read_csv("gape_size.csv", show_col_types = FALSE)
+bodysize_addons <- gape_lookup %>% 
+  transmute(species_f = as.factor(species_f), life_f = as.factor(life.stage),
+            body.length.cm, body.size.source)
 
 #Join body sizes to be added together
 bodysize_summary <- bind_rows(bodysize_summary, bodysize_addons)
@@ -844,8 +915,16 @@ bodysize_summary <- bodysize_summary[!duplicated(bodysize_summary), ]
 dupes <- duplicated(bodysize_summary[,c("species_f", "life_f")])
 bodysize_summary[dupes,]
 
+#remember which records carried their own body length, and which are ToMEx 1.0
+tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
+  mutate(.record_length = !is.na(body.length.cm),
+         .tomex1 = source != "ToMEx 2.0")
+
 #if there is a value for body size in the tomex2.0 database, mark it as "reported"
-tomex2.0_aoc_setup_final$body.size.source <- ifelse(!is.na(tomex2.0_aoc_setup_final$body.length.cm), "reported", NA)
+#(keep the ToMEx 1.0 sources, e.g., fishbase.org or "study"; they were previously overwritten)
+tomex2.0_aoc_setup_final$body.size.source <- ifelse(is.na(tomex2.0_aoc_setup_final$body.size.source) &
+                                                      !is.na(tomex2.0_aoc_setup_final$body.length.cm),
+                                                    "reported", as.character(tomex2.0_aoc_setup_final$body.size.source))
 
 tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
   left_join(bodysize_summary, by = join_by(species_f, life_f)) %>% 
@@ -854,44 +933,89 @@ tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>%
   select(-c(body.length.cm.y, body.length.cm.x)) %>% 
   #if tomex2 already has a body length source, keep that one, otherwise replace with an add-on value
   mutate(body.size.source = ifelse(is.na(body.size.source.x), body.size.source.y, body.size.source.x)) %>% 
-  select(-c(body.size.source.y, body.size.source.x)) %>% 
-  #calculate maximum ingestible size
-  mutate(max.size.ingest.mm = 10^(0.9341 * log10(body.length.cm * 10) - 1.1200)) %>% #(Jamm et al 2020 Nature paper)correction for cm to mm
-  mutate(max.size.ingest.um = 1000 * max.size.ingest.mm)
+  select(-c(body.size.source.y, body.size.source.x))
+#(maximum ingestible size is assigned after life stages are harmonized, below)
 
-####### Fix missing polymer densities in both TOMEX1 and TOMEX2 ####
-#Identify unique Polymers with NA values in density.g.cm3
-na_polymer = unique(tomex2.0_aoc_setup$poly_f[is.na(tomex2.0_aoc_setup$density.g.cm3)])
+####### Polymer densities ####
+#ToMEx 2.0 densities are filled from polymer_densities.csv above (before the particle masses);
+#ToMEx 1.0 records without a density are filled after the sphere-geometry fix below.
 
-# Convert to character and sort the unique species alphabetically
-na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
-na_polymer # >>> check the density in the literature
+#### ToMEx 1.0 spheres: particle volume, surface area and mass ####
+# RDAmaker.R never set the width of a sphere's (midpoint) particle, so volumefnx() and
+# SAfnx() filled it with R.ave x length: aoc_setup.RDS stores 0.67-0.77 x the sphere's
+# volume and mass and 0.79-0.85 x its surface area for every ToMEx 1.0 sphere. The ToMEx 1.0
+# particle counts and mass doses were converted with the true sphere mass and are kept.
+# Recompute the per-particle values (W = H = L) and the dose metrics derived from them; the
+# min/max values of polydisperse spheres were already correct. Mass keeps its density. Spheres
+# without a stored volume (no width:length ratio for their exposure route) get one too: a
+# sphere needs none; their masses and conversions are completed below.
+fix_tomex1_sphere_geometry <- function(df) {
+  s <- as.character(df$source) != "ToMEx 2.0" & df$shape_f %in% "Sphere" &
+    !is.na(df$size.length.um.used.for.conversions)
+  if (!any(s)) return(df)
+  L <- df$size.length.um.used.for.conversions[s]
+  v <- volumefnx(length = L, width = L, height = L)
+  sa <- SAfnx(length = L, width = L, height = L)
+  kv <- v / df$particle.volume.um3[s]
+  ksa <- sa / df$particle.surface.area.um2[s]
+  df$size.width.um.used.for.conversions[s] <- L
+  df$size.height.um.used.for.conversions[s] <- L
+  df$particle.volume.um3[s] <- v
+  df$particle.surface.area.um2[s] <- sa
+  df$mass.per.particle.mg[s] <- df$mass.per.particle.mg[s] * kv
+  for (col in intersect(c("dose.um3.mL.master", "dose.um3.kg.sediment.master"), names(df)))
+    df[[col]][s] <- df[[col]][s] * kv
+  for (col in intersect(c("dose.um2.mL.master", "dose.um2.kg.sediment.master",
+                          "dose.surface.area.um2.mL.master"), names(df)))
+    df[[col]][s] <- df[[col]][s] * ksa
+  for (col in intersect(c("dose.um2.ug.mL.master", "dose.um2.ug.kg.sediment.master",
+                          "particle.surface.area.um2.mg"), names(df)))
+    df[[col]][s] <- df[[col]][s] * ksa / kv
+  df
+}
+tomex2.0_aoc_setup_final <- fix_tomex1_sphere_geometry(tomex2.0_aoc_setup_final)
 
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "High Density Polyethylene"] = 0.953
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polylactic Acid"] = 1.240
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polycarbonate"] = 1.20
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Latex"] = 1.040
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Biopolymer"] = 1.240
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Poly(Styrene-co-acrylonitrile)"] = 1.08
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyethylene Vinyl Acetate"] = 0.953
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polymethylmethacrylate"] = 1.18
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyisoprene"] = 0.905
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polytetrafluoroethylene"] = 2.2
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyurethane"] = 1.19
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyvinyl Acetate"] = 1.19
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyvinylchloride/vinylacetate co-polymer"] = 1.38
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Sodium Polyacrylate"] = 1.32
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Starch/Polybutylene Adipate Terephthalate/Polylactic Acid"] = 1.05
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Tire Wear"] = 1.45
-tomex2.0_aoc_setup_final$density.g.cm3[tomex2.0_aoc_setup_final$poly_f == "Polyamidoamine"] = 1.22
+#### ToMEx 1.0 densities, particle masses and dose conversions ####
+# Fill missing densities from the polymer table (as for ToMEx 2.0 above), then complete what
+# RDAmaker.R left out, with the same equations as for ToMEx 2.0: particle masses where a
+# density and a particle volume exist, the conversion between particle and mass doses where
+# one of them is missing, and the volume / surface-area doses. RDAmaker.R converts sediment
+# doses only; ToMEx 1.0 water doses were converted in the ToMEx 1.0 compilation, which left
+# some mass doses without a particle count. Existing values are never changed.
+fill_tomex1_density <- function(df, table) {
+  t1 <- as.character(df$source) != "ToMEx 2.0"
+  df <- fill_density_from_table(df, table, rows = t1)
+  new <- t1
+  mass <- function(v) massfnx(v = v, p = df$density.g.cm3) * 1e-3
+  set_missing <- function(col, value, i = new) {
+    k <- i & is.na(df[[col]]) & !is.na(value)
+    df[[col]][k] <<- value[k]
+    k
+  }
+  set_missing("mass.per.particle.mg", mass(df$particle.volume.um3))
+  if ("particle.volume.um3.min" %in% names(df)) set_missing("mass.per.particle.mg.min", mass(df$particle.volume.um3.min))
+  if ("particle.volume.um3.max" %in% names(df)) set_missing("mass.per.particle.mg.max", mass(df$particle.volume.um3.max))
+  mg <- df$mass.per.particle.mg
+  label <- function(col, k) {
+    v <- as.character(df[[col]]); v[k] <- "converted"; df[[col]] <<- factor(v)
+  }
+  label("dose.mg.L.master.converted.reported", set_missing("dose.mg.L.master", df$dose.particles.mL.master * 1000 * mg))
+  label("dose.particles.mL.master.converted.reported", set_missing("dose.particles.mL.master", df$dose.mg.L.master / mg / 1000))
+  label("dose.mg.kg.sediment.master.converted.reported",
+        set_missing("dose.mg.kg.sediment.master", df$dose.particles.kg.sediment.master * mg))
+  label("dose.particles.kg.sediment.master.converted.reported",
+        set_missing("dose.particles.kg.sediment.master", df$dose.mg.kg.sediment.master / mg))
+  set_missing("dose.um3.mL.master", df$particle.volume.um3 * df$dose.particles.mL.master)
+  set_missing("dose.um3.kg.sediment.master", df$particle.volume.um3 * df$dose.particles.kg.sediment.master)
+  set_missing("dose.um2.mL.master", as.numeric(df$particle.surface.area.um2) * df$dose.particles.mL.master)
+  set_missing("dose.um2.kg.sediment.master", as.numeric(df$particle.surface.area.um2) * df$dose.particles.kg.sediment.master)
+  set_missing("dose.um2.ug.mL.master", df$dose.um2.mL.master / (mg / 1000))
+  set_missing("dose.um2.ug.kg.sediment.master", df$dose.um2.kg.sediment.master / (mg / 1000))
+  df
+}
+tomex2.0_aoc_setup_final <- fill_tomex1_density(tomex2.0_aoc_setup_final, polymer_densities)
+report_implausible_densities(tomex2.0_aoc_setup_final)
 
-
-#  check one last time to see if any densities are missing ##
-na_polymer = unique(tomex2.0_aoc_setup_final$poly_f[is.na(tomex2.0_aoc_setup_final$density.g.cm3)])
-
-# Convert to character and sort the unique species alphabetically
-na_polymer = data.frame(poly_f = sort(as.character(na_polymer)))
-na_polymer # >>> check the density in the literature
 
 #### Variable Management - Ana's code ####
 
@@ -904,6 +1028,46 @@ tomex2.0_aoc_setup_final$life_f =
                "juvenile" = "Juvenile")
 
 tomex2.0_aoc_setup_final$life_f = fct_na_value_to_level(tomex2.0_aoc_setup_final$life_f, "Not Reported")
+
+#### Body length and maximum ingestible size (mouth size) ####
+#See body_length_functions.R. Body length: row-level corrections (body_length_measured.csv),
+#then the record's own value, then the species x life-stage reference joined above; never a
+#default size. Mouth size: reported (record, else species x life stage), then an override from
+#gape_size.csv, then the Jams et al. (2020) prediction, else unresolved (excluded from food
+#dilution downstream). Previously every mouth size was recomputed from body length, which
+#overwrote the reported ToMEx 1.0 values (Koelmans et al. 2020) for 13 species / life stages.
+
+#record-level corrections of in vitro / in vivo status (vivo_corrections.csv)
+tomex2.0_aoc_setup_final <- apply_vivo_corrections(tomex2.0_aoc_setup_final,
+                                                   read_vivo_corrections("vivo_corrections.csv"))
+
+#DOI typo in the database (Kaposi et al. 2014)
+tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
+  mutate(doi = ifelse(doi == "0.1021/es404295e", "10.1021/es404295e", doi))
+
+tomex2.0_aoc_setup_final <- tomex2.0_aoc_setup_final %>% 
+  apply_body_length_measured(read_body_length_measured("body_length_measured.csv"))
+tomex2.0_aoc_setup_final <- classify_body_length_basis(tomex2.0_aoc_setup_final,
+                                                       record_length = tomex2.0_aoc_setup_final$.record_length,
+                                                       tomex1 = tomex2.0_aoc_setup_final$.tomex1) %>% 
+  select(-c(.record_length, .tomex1))
+
+tomex2.0_aoc_setup_final <- assign_max_size_ingest(tomex2.0_aoc_setup_final,
+                                                   beta_log10_body_length = 0.9341,
+                                                   body_length_intercept = 1.1200,
+                                                   overrides = gape_lookup %>% 
+                                                     transmute(species_f, life_f = life.stage,
+                                                               max.size.ingest.override.um))
+
+#report (do not default) test organisms with no resolved size; strict = TRUE stops the build
+report_unresolved_body_length(tomex2.0_aoc_setup_final,
+                              path = "ToMEx2.0_Onboarding/unresolved_body_length.csv",
+                              strict = FALSE)
+warn_jams_domain(tomex2.0_aoc_setup_final)
+
+#SSD eligibility: in vitro records never reach an SSD (ssd_eligible()); reasons are kept per record
+tomex2.0_aoc_setup_final$ssd_exclusion_reason <- ssd_exclusion_reason(tomex2.0_aoc_setup_final)
+report_excluded_in_vitro(tomex2.0_aoc_setup_final, path = "ToMEx2.0_Onboarding/excluded_in_vitro.csv")
 
 #sex
 tomex2.0_aoc_setup_final$sex = fct_collapse(tomex2.0_aoc_setup_final$sex,
@@ -1164,7 +1328,7 @@ saveRDS(tomex2.0_aoc_endpoint_final, file = "aoc_endpoint_tomex2.RDS")
 ##### AOC SEARCH #####
 
 tomex2.0_aoc_search <- tomex2.0_aoc_setup_final %>% 
-  dplyr::select(source, doi, authors, year, tier_zero_tech_f, tier_zero_risk_f, species_f, org_f, env_f, life_f, vivo_f, sex, body.length.cm, max.size.ingest.mm,
+  dplyr::select(source, doi, authors, year, tier_zero_tech_f, tier_zero_risk_f, species_f, org_f, env_f, life_f, vivo_f, sex, body.length.cm, body.length.basis, max.size.ingest.mm, max.size.ingest.basis, jams_domain,
                 #experimental parameters
                 exp_type_f, exposure.route, mix, negative.control, reference.material, exposure.media, solvent, detergent,
                 media.ph, media.sal.ppt, media.temp, media.temp.min, media.temp.max, exposure.duration.d, `Recovery (Days)`, acute.chronic_f,
@@ -1200,7 +1364,10 @@ tomex2.0_aoc_search_final <- tomex2.0_aoc_search %>%
                 'Risk Assessment "Red Criteria"' = tier_zero_risk_f,'Species' = species_f, 
                 'Organism Group' = org_f, 'Environment' = env_f, 'Life Stage' = life_f, 'In vitro/in vivo' = vivo_f,
                 'Sex' = sex, 'Estimated Body Length (cm)' = body.length.cm, 
-                'Estimated Maximum Ingestible Size (mm)' = max.size.ingest.mm, 'Experiment Type' = exp_type_f,
+                'Body Length Basis' = body.length.basis,
+                'Estimated Maximum Ingestible Size (mm)' = max.size.ingest.mm,
+                'Maximum Ingestible Size Basis' = max.size.ingest.basis,
+                'Body-Length Model Domain (Jams et al. 2020)' = jams_domain, 'Experiment Type' = exp_type_f,
                 'Exposure Route' = exposure.route, 'Particle Mix?' = mix, 'Negative Control' = negative.control, 
                 'Reference Particle' = reference.material, 'Exposure Media' = exposure.media,
                 'Solvent' = solvent, 'Detergent' = detergent, 'pH' = media.ph, 'Salinity (ppt)' = media.sal.ppt, 

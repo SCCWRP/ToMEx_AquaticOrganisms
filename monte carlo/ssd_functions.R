@@ -147,6 +147,7 @@ process_environment_data <- function(data, env_filter, upper.tissue.trans.size.u
   # Filter and process data for Tissue Translocation
   filtered_data_small_default_t1_2 <- data %>%
     ungroup() %>% 
+    ssd_eligible() %>% #in vivo only (vivo_functions.R)
     mutate(dose_new = particles.mL.ox.stress / (af.time * af.noec)) %>%
     drop_na(dose_new) %>%
     mutate(dose_new = dose_new * 1000) %>% # Convert particles/mL to particles/L
@@ -170,6 +171,7 @@ process_environment_data <- function(data, env_filter, upper.tissue.trans.size.u
   
   # Filter and process data for Food Dilution
   filtered_data_large_default_t1_2 <- data %>%
+    ssd_eligible() %>% #in vivo only (vivo_functions.R)
     filter(Group != "Algae") %>%
     mutate(dose_new = particles.mL.food.dilution / (af.time * af.noec)) %>%
     drop_na(dose_new) %>%

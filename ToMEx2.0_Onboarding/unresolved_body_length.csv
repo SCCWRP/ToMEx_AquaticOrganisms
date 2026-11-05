@@ -1,0 +1,54 @@
+doi,species_f,life_f,Group,reason,n_rows
+10.1002/etc.5076,Dreissena polymorpha,Not Reported,Mollusca,unresolved,16
+10.1007/s11356-020-11731-x,Oreochromis niloticus,juvenile,Fish,unresolved,38
+10.1016/j.aninu.2022.01.007,Perca flavescens,juvenile,Fish,unresolved,88
+10.1016/j.aquaculture.2021.737245,Sparus aurata,early,Fish,unresolved,20
+10.1016/j.aquatox.2020.105737,Sparus aurata,juvenile,Fish,unresolved,44
+10.1016/j.aquatox.2021.106004,Sparus aurata,juvenile,Fish,unresolved,15
+10.1016/j.chemosphere.2020.128824,Anabaena NA,Not Reported,Cyanobacteria,unresolved,16
+10.1016/j.chemosphere.2021.129977,Carassius auratus,Not Reported,Fish,unresolved,48
+10.1016/j.ecoenv.2020.111665,Aurelia sp.,early,Cnidaria,unresolved,128
+10.1016/j.ecoenv.2020.111794 ,Apostichopus japonicus,adult,Echinoderm,unresolved,39
+10.1016/j.ecoenv.2020.111794 ,Apostichopus japonicus,juvenile,Echinoderm,unresolved,39
+10.1016/j.envpol.2016.05.043,NA NA,Not Reported,Mixed,unresolved,20
+10.1016/j.envpol.2020.116238,Acropora NA,Not Reported,Cnidaria,unresolved,12
+10.1016/j.envpol.2020.116238,Seriatopora hystrix,Not Reported,Cnidaria,unresolved,12
+10.1016/j.envpol.2021.116960,Sparus aurata,early,Fish,unresolved,10
+10.1016/j.envpol.2021.117379,Acartia tonsa,early,Crustacea,unresolved,3
+10.1016/j.envpol.2021.117379,Acartia tonsa,juvenile,Crustacea,unresolved,3
+10.1016/j.envpol.2021.117379,Acartia tonsa,Not Reported,Crustacea,unresolved,1
+10.1016/j.envpol.2021.117848,Chironomus riparius,early,Insect,unresolved,15
+10.1016/j.fsi.2021.04.010,Hypophthalmichthys molitrix,juvenile,Fish,unresolved,16
+10.1016/j.fsi.2021.04.014,Oncorhynchus mykiss,Not Reported,Fish,in vitro: not applicable,45
+10.1016/j.jhazmat.2020.123733,Danio rerio,juvenile,Fish,unresolved,36
+10.1016/j.jhazmat.2020.123739,Brachionus koreanus,juvenile,Rotifera,unresolved,36
+10.1016/j.jhazmat.2020.126059,Sparus aurata,juvenile,Fish,unresolved,6
+10.1016/j.jhazmat.2021.125583,Amphiura filiformis,Not Reported,Echinoderm,unresolved,3
+10.1016/j.jhazmat.2021.125858,Apostichopus japonicus,Not Reported,Echinoderm,in vitro: not applicable,1
+10.1016/j.jhazmat.2022.129351,Dreissena bugensis,Not Reported,Mollusca,unresolved,28
+10.1016/j.jhazmat.2023.132097,Chironomus tepperi,early,Insect,unresolved,76
+10.1016/j.marenvres.2021.105329,Mytilus galloprovincialis,Not Reported,Mollusca,unresolved,21
+10.1016/j.marpolbul.2021.112173,Tubastrea aurea,Not Reported,Cnidaria,unresolved,40
+10.1016/j.scitotenv.2020.142341,Paracentrotus lividus,adult,Echinoderm,unresolved,10
+10.1016/j.scitotenv.2020.143311,Litopenaeus vannamei,juvenile,Crustacea,unresolved,15
+10.1016/j.scitotenv.2021.149217,Ostrea edulis,Not Reported,Mollusca,unresolved,10
+10.1016/j.scitotenv.2021.151909,Oncorhynchus mykiss,early,Fish,unresolved,71
+10.1016/j.scitotenv.2022.154207,NA,Not Reported,Mixed,unresolved,84
+10.1021/acs.est.1c00618,Paracentrotus lividus,adult,Echinoderm,unresolved,30
+10.1021/acs.est.3c06829,Chironomus riparius,early,Insect,unresolved,12
+10.1021/acsearthspacechem.0c00213,Protopalythoa NA,Not Reported,Cnidaria,unresolved,36
+10.1039/D1EN00284H,Anabaena NA,Not Reported,Cyanobacteria,in vitro: not applicable,24
+10.1126/sciadv.aay4054,NA NA,Not Reported,Mixed,unresolved,24
+10.3389/fmars.2021.647394,Paracentrotus lividus,adult,Echinoderm,in vitro: not applicable,15
+10.3389/fmars.2021.716349,Gyrodinium sp.,Not Reported,Dinoflagellate,unresolved,17
+10.3389/fmars.2021.716349,Oxyrrhis marina,Not Reported,Dinoflagellate,unresolved,15
+10.3389/fmars.2021.716349,Protoperidinium bipes,Not Reported,Dinoflagellate,unresolved,2
+10.3389/fphys.2021.668645,Oryzias latipes,early,Fish,unresolved,56
+10.3389/fphys.2021.668645,Oryzias latipes,juvenile,Fish,unresolved,56
+10.3389/fphys.2022.923278,Ictalurus punctatus,early,Fish,unresolved,72
+10.3390/jmse9101088,Scaphechinus mirabilis,early,Echinoderm,unresolved,12
+10.3390/nano11102471,Amphidinium carterae,Not Reported,Dinoflagellate,unresolved,120
+10.3390/toxics9100256,Hydropsyche pellucidula,early,Insect,unresolved,15
+10.3390/toxics9110305,Brachionus calyciflorus,Not Reported,Rotifera,unresolved,48
+10.3390/toxics9110305,Brachionus fernandoi,Not Reported,Rotifera,unresolved,24
+ 10.1016/j.jhazmat.2020.124287 ,Hediste diversicolor,Not Reported,Annelida,unresolved,336

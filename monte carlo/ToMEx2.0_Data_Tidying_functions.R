@@ -256,11 +256,11 @@ tomex2.0_aoc_setup <- tomex2.0 %>%
    mutate(organism.group = factor(organism.group)) %>% 
    rename(org_f = organism.group) %>% 
    #Factor in vitro in vivo
-   mutate(in.vitro.in.vivo = factor(case_when(
+   mutate(in.vitro.in.vivo = factor(case_when(  #legacy copy; the maintained script uses normalize_vivo()
      in.vitro.in.vivo == "In Vivo" ~ "In Vivo",
      in.vitro.in.vivo == "In Vitro" ~ "In Vitro",
      in.vitro.in.vivo == "in vivo" ~ "In Vivo",
-     in.vitro.in.vivo == "in vitro" ~ "In Vivo",
+     in.vitro.in.vivo == "in vitro" ~ "In Vitro",
    ))) %>% 
    rename(vivo_f = in.vitro.in.vivo) %>%
    #Factor life stage
